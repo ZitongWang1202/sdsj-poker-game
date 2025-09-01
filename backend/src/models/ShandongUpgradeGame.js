@@ -74,9 +74,81 @@ class ShandongUpgradeGame {
 
   // 亮主 (山东升级：需要一王带一对)
   declareTrump(playerId, cards) {
-    // TODO: 实现亮主逻辑
-    // 需要检查是否符合"一王带一对"的规则
-    console.log(`玩家 ${playerId} 尝试亮主:`, cards);
+    if (this.gamePhase !== 'bidding') {
+      return { success: false, message: '不在亮主阶段' };
+    }
+
+    const player = this.players[playerId];
+    if (!player) {
+      return { success: false, message: '玩家不存在' };
+    }
+
+    // 山东升级亮主规则: 一王带一对
+    if (cards.length !== 3) {
+      return { success: false, message: '亮主需要选择3张牌(一王带一对)' };
+    }
+
+    // 检查是否有王牌
+    const jokers = cards.filter(card => card.suit === 'joker');
+    const normalCards = cards.filter(card => card.suit !== 'joker');
+
+    if (jokers.length !== 1) {
+      return { success: false, message: '需要恰好一张王牌' };
+    }
+
+    if (normalCards.length !== 2) {
+      return { success: false, message: '需要恰好两张普通牌' };
+    }
+
+    // 检查是否为一对
+    const [card1, card2] = normalCards;
+    if (card1.rank !== card2.rank) {
+      return { success: false, message: '两张普通牌必须是一对(相同点数)' };
+    }
+
+    // 检查玩家是否确实拥有这些牌
+    const playerCardIds = player.cards.map(c => c.id);
+    const hasAllCards = cards.every(card => 
+      playerCardIds.includes(card.id)
+    );
+
+    if (!hasAllCards) {
+      return { success: false, message: '你没有这些牌' };
+    }
+
+    // 确定主牌花色和级别
+    const pairRank = card1.rank;
+    let trumpSuit = null;
+    
+    // 如果对子是级牌，则花色为主花色
+    if (pairRank === this.currentLevel) {
+      trumpSuit = card1.suit === card2.suit ? card1.suit : 'mixed';
+    } else {
+      trumpSuit = card1.suit === card2.suit ? card1.suit : 'mixed';
+    }
+
+    // 设置主牌信息
+    this.trumpSuit = trumpSuit;
+    this.trumpRank = pairRank;
+    this.dealer = playerId;
+    
+    // 标记为庄家
+    this.players.forEach((p, index) => {
+      p.setDealer(index === playerId);
+    });
+
+    // 简化流程：亮主后直接进入出牌阶段
+    this.gamePhase = 'playing';
+    this.currentTurn = playerId; // 庄家先出牌
+
+    console.log(`玩家 ${player.name} 亮主成功: ${trumpSuit} ${pairRank}`);
+
+    return { 
+      success: true, 
+      trumpSuit: trumpSuit,
+      trumpRank: pairRank,
+      dealer: playerId
+    };
   }
 
   // 扣底 (由庄家对门扣底)
@@ -96,10 +168,29 @@ class ShandongUpgradeGame {
 
   // 出牌
   playCards(playerId, cardIndices) {
-    if (this.gamePhase !== 'playing') return false;
-    if (playerId !== this.currentTurn) return false;
+    if (this.gamePhase !== 'playing') {
+      return { success: false, message: '不在出牌阶段' };
+    }
+    
+    if (playerId !== this.currentTurn) {
+      return { success: false, message: '不是你的回合' };
+    }
     
     const player = this.players[playerId];
+    if (!player) {
+      return { success: false, message: '玩家不存在' };
+    }
+
+    if (cardIndices.length === 0) {
+      return { success: false, message: '必须选择至少一张牌' };
+    }
+
+    // 验证出牌是否合法（简化版，后续可扩展复杂规则）
+    const isValidPlay = this.validateCardPlay(player, cardIndices);
+    if (!isValidPlay.valid) {
+      return { success: false, message: isValidPlay.message };
+    }
+
     const playedCards = player.playCards(cardIndices);
     
     this.roundCards.push({
@@ -116,7 +207,27 @@ class ShandongUpgradeGame {
       this.evaluateRound();
     }
     
-    return true;
+    return { 
+      success: true, 
+      cards: playedCards,
+      nextPlayer: this.currentTurn 
+    };
+  }
+
+  // 验证出牌是否合法
+  validateCardPlay(player, cardIndices) {
+    // 检查索引是否有效
+    for (const index of cardIndices) {
+      if (index < 0 || index >= player.cards.length) {
+        return { valid: false, message: '无效的牌索引' };
+      }
+    }
+
+    // 基础验证通过
+    // TODO: 添加更复杂的山东升级规则验证
+    // 比如：跟牌规则、花色要求、主杀规则等
+    
+    return { valid: true };
   }
 
   // 评估当前轮次

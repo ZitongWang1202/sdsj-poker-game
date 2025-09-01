@@ -1,0 +1,5 @@
+[33md145ff1[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/main[m[33m)[m fix: 修复Webpack配置，前后端连接测试通过，Sprint 1完成
+[33m0723cd8[m Merge branch 'main' of github.com:ZitongWang1202/sdsj-poker-game
+[33m82a2df9[m 修复并重建frontend: 完整的React + Webpack项目
+[33m6b61a06[m 🚀 Sprint 1完成: 实现核心基础架构和房间系统✨ 新功能:- 后端Express + Socket.io服务器架构- 完整的房间创建/加入系统 (6位房间ID)- 实时多人连接支持 (最多4人)- React前端游戏大厅界面- 完整的扑克牌SVG资源集成 (108张双副牌)- 山东升级游戏数据模型 (Player, Room, Card, Game)🔧 技术实现:- Socket.io实时通信 (WebSocket + polling fallback)- 响应式UI设计和状态管理- 扑克牌工具函数 (排序、主副牌判断)- 游戏管理器 (房间和玩家管理)- 山东升级特殊规则支持 (2,3,5常主)📚 文档更新:- 完善敏捷开发文档 (AGILE_NOTES.md)- 更新用户故事进度 (USER_STORIES.md)- 新增技术架构文档 (TECHNICAL_PROGRESS.md)- 更新项目README进度说明🎯 Sprint 1成果:- MVP基础设施完成 ✅- 4人实时连接功能 ✅- 房间管理系统 ✅- 为Sprint 2游戏逻辑开发打好基础下一步: Sprint 2 - 实现山东升级游戏核心逻辑
+[33mc673202[m Initial commit: 山东升级扑克游戏项目初始化

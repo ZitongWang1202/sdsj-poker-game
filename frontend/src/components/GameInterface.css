@@ -1,0 +1,170 @@
+/* 内嵌游戏界面样式 - 与GameLobby保持一致 */
+.game-interface {
+  margin-top: 20px;
+  padding: 15px;
+  background-color: #f8f9fa;
+  border-radius: 8px;
+  border: 1px solid #dee2e6;
+}
+
+/* 游戏消息 */
+.game-message {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  padding: 10px 15px;
+  border-radius: 6px;
+  margin-bottom: 15px;
+  text-align: center;
+  font-weight: 500;
+  font-size: 14px;
+}
+
+/* 游戏信息 */
+.game-info {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px;
+  margin-bottom: 15px;
+  padding: 10px;
+  background-color: white;
+  border-radius: 6px;
+  border: 1px solid #e0e0e0;
+}
+
+.game-info > div {
+  text-align: center;
+  font-size: 14px;
+}
+
+.game-info strong {
+  color: #495057;
+}
+
+.trump-info {
+  background-color: #fff3cd;
+  padding: 5px;
+  border-radius: 4px;
+  border: 1px solid #ffeaa7;
+}
+
+/* 我的手牌 */
+.my-hand {
+  background-color: white;
+  border-radius: 8px;
+  padding: 15px;
+  border: 1px solid #dee2e6;
+}
+
+.hand-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 15px;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.hand-header h4 {
+  margin: 0;
+  color: #495057;
+  font-size: 16px;
+}
+
+.hand-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.selected-count {
+  color: #007bff;
+  font-weight: 500;
+  font-size: 14px;
+}
+
+/* 卡牌容器 */
+.cards-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  max-height: 200px;
+  overflow-y: auto;
+  padding: 5px;
+}
+
+/* 游戏卡牌样式 */
+.game-card {
+  width: 50px;
+  height: 70px;
+  border: 2px solid #dee2e6;
+  border-radius: 6px;
+  background-color: white;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+
+.game-card:hover {
+  border-color: #007bff;
+  transform: translateY(-2px);
+  box-shadow: 0 2px 8px rgba(0, 123, 255, 0.2);
+}
+
+.game-card.selected {
+  border-color: #007bff;
+  background-color: #e3f2fd;
+  transform: translateY(-5px);
+  box-shadow: 0 4px 12px rgba(0, 123, 255, 0.3);
+}
+
+.card-content {
+  font-size: 11px;
+  font-weight: bold;
+  text-align: center;
+  line-height: 1.2;
+  word-break: break-all;
+}
+
+/* 等待状态 */
+.waiting-cards {
+  text-align: center;
+  padding: 20px;
+  color: #6c757d;
+  font-style: italic;
+}
+
+/* 按钮样式继承自GameLobby.css */
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+  .cards-container {
+    max-height: 150px;
+  }
+  
+  .game-card {
+    width: 45px;
+    height: 60px;
+  }
+  
+  .card-content {
+    font-size: 10px;
+  }
+  
+  .hand-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  
+  .hand-actions {
+    justify-content: center;
+  }
+  
+  .game-info {
+    grid-template-columns: 1fr;
+    gap: 5px;
+  }
+}

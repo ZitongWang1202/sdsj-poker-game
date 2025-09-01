@@ -100,6 +100,11 @@ class GameManager {
     return this.rooms.get(roomId);
   }
 
+  // 获取玩家信息
+  getPlayerInfo(socketId) {
+    return this.players.get(socketId);
+  }
+
   // 生成房间ID
   generateRoomId() {
     return Math.random().toString(36).substring(2, 8).toUpperCase();

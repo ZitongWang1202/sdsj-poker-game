@@ -54,8 +54,31 @@ io.on('connection', (socket) => {
       // 如果房间人满，开始游戏
       if (result.room.players.length === 4) {
         gameManager.startGame(roomId);
-        io.to(roomId).emit('gameStarted', result.room);
-        console.log(`房间 ${roomId} 游戏开始`);
+        
+        // 通知游戏开始
+        io.to(roomId).emit('gameStarted', {
+          message: '🎮 游戏开始！正在发牌...',
+          room: result.room
+        });
+        
+        // 发牌给每个玩家
+        setTimeout(() => {
+          const room = gameManager.getRoom(roomId);
+          if (room && room.game) {
+            room.players.forEach((player, index) => {
+              const playerSocket = io.sockets.sockets.get(player.socketId);
+              if (playerSocket) {
+                playerSocket.emit('cardsDealt', {
+                  cards: player.cards,
+                  playerPosition: index,
+                  gameState: room.game.getGameState()
+                });
+              }
+            });
+          }
+        }, 1000); // 1秒后发牌
+        
+        console.log(`房间 ${roomId} 游戏开始，已发牌`);
       }
     } else {
       socket.emit('joinError', result.message);
@@ -66,6 +89,79 @@ io.on('connection', (socket) => {
   socket.on('getRooms', () => {
     const rooms = gameManager.getAvailableRooms();
     socket.emit('roomsList', rooms);
+  });
+
+  // 亮主
+  socket.on('declareTrump', (data) => {
+    const { roomId, cards } = data;
+    const playerInfo = gameManager.getPlayerInfo(socket.id);
+    
+    if (!playerInfo) {
+      socket.emit('trumpError', '玩家信息不存在');
+      return;
+    }
+    
+    const room = gameManager.getRoom(roomId);
+    if (!room || !room.game) {
+      socket.emit('trumpError', '房间或游戏不存在');
+      return;
+    }
+    
+    const result = room.game.declareTrump(playerInfo.player.position, cards);
+    if (result.success) {
+      // 通知所有玩家亮主成功
+      io.to(roomId).emit('trumpDeclared', {
+        playerName: playerInfo.player.name,
+        playerId: playerInfo.player.position,
+        trumpSuit: result.trumpSuit,
+        trumpRank: result.trumpRank,
+        gameState: room.game.getGameState()
+      });
+      console.log(`玩家 ${playerInfo.player.name} 亮主成功: ${result.trumpSuit}`);
+    } else {
+      socket.emit('trumpError', result.message);
+    }
+  });
+
+  // 出牌
+  socket.on('playCards', (data) => {
+    const { roomId, cardIndices } = data;
+    const playerInfo = gameManager.getPlayerInfo(socket.id);
+    
+    if (!playerInfo) {
+      socket.emit('playError', '玩家信息不存在');
+      return;
+    }
+    
+    const room = gameManager.getRoom(roomId);
+    if (!room || !room.game) {
+      socket.emit('playError', '房间或游戏不存在');
+      return;
+    }
+    
+    const result = room.game.playCards(playerInfo.player.position, cardIndices);
+    if (result.success) {
+      // 通知所有玩家出牌
+      io.to(roomId).emit('cardsPlayed', {
+        playerName: playerInfo.player.name,
+        playerId: playerInfo.player.position,
+        cards: result.cards,
+        gameState: room.game.getGameState()
+      });
+      
+      // 更新玩家手牌
+      const playerSocket = io.sockets.sockets.get(playerInfo.player.socketId);
+      if (playerSocket) {
+        playerSocket.emit('handUpdated', {
+          cards: playerInfo.player.cards,
+          gameState: room.game.getGameState()
+        });
+      }
+      
+      console.log(`玩家 ${playerInfo.player.name} 出牌: ${result.cards.length}张`);
+    } else {
+      socket.emit('playError', result.message);
+    }
   });
 
   // 断开连接

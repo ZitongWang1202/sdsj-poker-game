@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import socketService from '../services/socketService';
+import GameInterface from './GameInterface';
 import './GameLobby.css';
 
 const GameLobby = () => {
@@ -10,6 +11,7 @@ const GameLobby = () => {
   const [connectionStatus, setConnectionStatus] = useState('disconnected');
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(false);
+  const [gameStarted, setGameStarted] = useState(false);
 
   useEffect(() => {
     // 连接到服务器
@@ -54,8 +56,9 @@ const GameLobby = () => {
       setMessage(`👋 新玩家加入房间`);
     });
 
-    socket.on('gameStarted', (room) => {
-      setMessage(`🎮 游戏开始！4名玩家已齐全`);
+    socket.on('gameStarted', (data) => {
+      setMessage(data.message || `🎮 游戏开始！4名玩家已齐全`);
+      setGameStarted(true);
     });
 
     socket.on('joinError', (error) => {
@@ -276,9 +279,10 @@ const GameLobby = () => {
             </div>
           </div>
 
-          {currentRoom.gameStarted ? (
+          {gameStarted ? (
             <div className="game-status success-message">
               <p>🎮 游戏进行中...</p>
+              <GameInterface room={currentRoom} />
             </div>
           ) : (
             <div className="waiting-status info-message">
