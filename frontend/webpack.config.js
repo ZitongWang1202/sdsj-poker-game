@@ -1,5 +1,6 @@
 const path = require('path');
 const HtmlWebpackPlugin = require('html-webpack-plugin');
+const webpack = require('webpack');
 
 module.exports = {
   entry: './src/index.js',
@@ -34,6 +35,12 @@ module.exports = {
     new HtmlWebpackPlugin({
       template: './public/index.html',
       title: '山东升级扑克游戏',
+    }),
+    new webpack.DefinePlugin({
+      'process.env': {
+        'NODE_ENV': JSON.stringify(process.env.NODE_ENV || 'development'),
+        'REACT_APP_SERVER_URL': JSON.stringify(process.env.REACT_APP_SERVER_URL || 'http://localhost:3001')
+      }
     })
   ],
   devServer: {
@@ -46,6 +53,9 @@ module.exports = {
     open: true,
   },
   resolve: {
-    extensions: ['.js', '.jsx']
+    extensions: ['.js', '.jsx'],
+    fallback: {
+      "process": require.resolve("process/browser")
+    }
   }
 };
