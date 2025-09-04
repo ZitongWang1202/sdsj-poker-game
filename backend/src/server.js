@@ -30,7 +30,9 @@ const gameManager = new GameManager();
 
 // Socket.io连接处理
 io.on('connection', (socket) => {
-  console.log(`玩家连接: ${socket.id}`);
+  console.log('✅ 新客户端连接成功:', socket.id);
+  console.log('🔗 连接来源:', socket.handshake.address);
+  console.log('🌐 User-Agent:', socket.handshake.headers['user-agent']?.slice(0, 50));
 
   // 创建房间
   socket.on('createRoom', (playerName) => {
@@ -63,20 +65,32 @@ io.on('connection', (socket) => {
         
         // 发牌给每个玩家
         setTimeout(() => {
+          console.log(`⏰ 开始发牌流程 - 房间: ${roomId}`);
           const room = gameManager.getRoom(roomId);
           if (room && room.game) {
+            console.log(`🎴 房间 ${roomId} 游戏实例存在，开始发牌`);
+            console.log(`👥 房间内玩家数量: ${room.players.length}`);
+            
             room.players.forEach((player, index) => {
               const playerSocket = io.sockets.sockets.get(player.socketId);
+              console.log(`🃏 给玩家 ${player.name} (位置${index}) 发牌 ${player.cards?.length || 0} 张`);
+              
               if (playerSocket) {
-                playerSocket.emit('cardsDealt', {
+                const dealData = {
                   cards: player.cards,
                   playerPosition: index,
                   gameState: room.game.getGameState()
-                });
+                };
+                console.log(`📤 发送cardsDealt事件给 ${player.name}:`, dealData);
+                playerSocket.emit('cardsDealt', dealData);
+              } else {
+                console.log(`❌ 玩家 ${player.name} 的Socket连接不存在`);
               }
             });
+          } else {
+            console.log(`❌ 房间 ${roomId} 或游戏实例不存在`);
           }
-        }, 1000); // 1秒后发牌
+        }, 2000); // 延长到2秒，确保前端准备好
         
         console.log(`房间 ${roomId} 游戏开始，已发牌`);
       }
@@ -89,6 +103,14 @@ io.on('connection', (socket) => {
   socket.on('getRooms', () => {
     const rooms = gameManager.getAvailableRooms();
     socket.emit('roomsList', rooms);
+  });
+
+  // 获取房间信息
+  socket.on('getRoomInfo', (roomId) => {
+    const room = gameManager.getRoom(roomId);
+    if (room) {
+      socket.emit('roomInfo', room);
+    }
   });
 
   // 亮主

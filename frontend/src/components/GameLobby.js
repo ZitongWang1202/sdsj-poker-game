@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import socketService from '../services/socketService';
-import GameInterface from './GameInterface';
+import { io } from 'socket.io-client';
 import './GameLobby.css';
 
 const GameLobby = () => {
+  const navigate = useNavigate();
   const [playerName, setPlayerName] = useState('');
   const [roomId, setRoomId] = useState('');
   const [currentRoom, setCurrentRoom] = useState(null);
@@ -11,64 +13,121 @@ const GameLobby = () => {
   const [connectionStatus, setConnectionStatus] = useState('disconnected');
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(false);
-  const [gameStarted, setGameStarted] = useState(false);
 
   useEffect(() => {
+    console.log('🎮 GameLobby组件开始连接Socket服务器');
+    
     // 连接到服务器
-    const socket = socketService.connect();
+    const connectSocket = async () => {
+      try {
+        console.log('🎯 开始连接Socket服务器:', process.env.REACT_APP_SERVER_URL || 'http://localhost:3001');
+        
+        // 直接测试Socket.io导入
+        console.log('🧪 测试socket.io导入:', typeof io);
+        
+        const socket = socketService.connect();
+        console.log('🔗 GameLobby获取到Socket实例:', socket?.connected);
+        console.log('🔗 Socket实例详情:', {
+          connected: socket?.connected,
+          id: socket?.id,
+          transport: socket?.io?.engine?.transport?.name
+        });
+        
+        // 添加连接状态检查
+        setTimeout(() => {
+          console.log('📊 连接状态检查:', {
+            connected: socket?.connected,
+            id: socket?.id,
+            readyState: socket?.io?.readyState
+          });
+          
+          // 如果已连接但UI状态未更新，手动更新
+          if (socket?.connected && connectionStatus !== 'connected') {
+            console.log('🔄 手动更新连接状态');
+            setConnectionStatus('connected');
+            setMessage('✅ 已连接到服务器');
+            setLoading(false);
+          }
+        }, 3000);
+        
+      } catch (error) {
+        console.error('❌ GameLobby连接失败:', error);
+        setConnectionStatus('error');
+        setMessage('❌ 连接失败，请检查网络');
+      }
+    };
+    
+    connectSocket();
     
     // 监听连接状态
-    socket.on('connect', () => {
+    socketService.on('connect', () => {
+      console.log('🟢 GameLobby收到connect事件，更新UI状态');
       setConnectionStatus('connected');
       setMessage('✅ 已连接到服务器');
       setLoading(false);
       // 获取房间列表
       socketService.getRooms();
-    });
+    }, 'GameLobby');
 
-    socket.on('disconnect', () => {
+    socketService.on('disconnect', () => {
       setConnectionStatus('disconnected');
       setMessage('❌ 与服务器断开连接');
       setLoading(false);
-    });
+    }, 'GameLobby');
 
-    socket.on('connect_error', (error) => {
+    socketService.on('connect_error', (error) => {
       setConnectionStatus('error');
       setMessage('❌ 连接服务器失败，请检查后端是否启动');
       setLoading(false);
-    });
+    }, 'GameLobby');
 
     // 监听房间相关事件
-    socket.on('roomCreated', (room) => {
+    socketService.on('roomCreated', (room) => {
       setCurrentRoom(room);
       setMessage(`🎉 房间创建成功！房间ID: ${room.id}`);
       setLoading(false);
-    });
+    }, 'GameLobby');
 
-    socket.on('joinedRoom', (room) => {
+    socketService.on('joinedRoom', (room) => {
       setCurrentRoom(room);
-      setMessage(`🎉 成功加入房间: ${room.id}`);
+      setMessage(`✅ 成功加入房间: ${room.id}`);
       setLoading(false);
-    });
+    }, 'GameLobby');
 
-    socket.on('playerJoined', (room) => {
+    socketService.on('playerJoined', (room) => {
       setCurrentRoom(room);
       setMessage(`👋 新玩家加入房间`);
-    });
+    }, 'GameLobby');
 
-    socket.on('gameStarted', (data) => {
-      setMessage(data.message || `🎮 游戏开始！4名玩家已齐全`);
-      setGameStarted(true);
-    });
+    socketService.on('gameStarted', (data) => {
+      console.log('🎮 GameLobby收到游戏开始事件:', data);
+      
+      setMessage(data.message || `🎮 游戏开始！正在进入游戏...`);
+      
+      // 优先使用事件数据中的room信息
+      const roomIdToNavigate = data.room?.id || currentRoom?.id;
+      console.log('🎯 准备跳转到房间:', roomIdToNavigate);
+      
+      if (roomIdToNavigate) {
+        // 清理当前组件的事件监听并跳转
+        setTimeout(() => {
+          console.log('🚀 执行页面跳转到:', `/game/${roomIdToNavigate}`);
+          socketService.offComponent('GameLobby'); // 清理事件监听
+          navigate(`/game/${roomIdToNavigate}`);
+        }, 1000); // 缩短延迟时间
+      } else {
+        console.log('❌ 没有找到房间ID，跳过导航');
+      }
+    }, 'GameLobby');
 
-    socket.on('joinError', (error) => {
+    socketService.on('joinError', (error) => {
       setMessage(`❌ 加入房间失败: ${error}`);
       setLoading(false);
-    });
+    }, 'GameLobby');
 
-    socket.on('roomsList', (rooms) => {
+    socketService.on('roomsList', (rooms) => {
       setAvailableRooms(rooms);
-    });
+    }, 'GameLobby');
 
     // 设置初始连接状态
     setLoading(true);
@@ -76,7 +135,8 @@ const GameLobby = () => {
 
     // 清理函数
     return () => {
-      socketService.disconnect();
+      console.log('🧹 GameLobby组件卸载，清理事件监听');
+      socketService.offComponent('GameLobby');
     };
   }, []);
 
@@ -279,10 +339,10 @@ const GameLobby = () => {
             </div>
           </div>
 
-          {gameStarted ? (
+          {currentRoom.gameStarted ? (
             <div className="game-status success-message">
-              <p>🎮 游戏进行中...</p>
-              <GameInterface room={currentRoom} />
+              <p>🎮 游戏开始！</p>
+              <p>💡 正在跳转到游戏桌...</p>
             </div>
           ) : (
             <div className="waiting-status info-message">

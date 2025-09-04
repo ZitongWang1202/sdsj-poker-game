@@ -51,6 +51,8 @@ module.exports = {
     port: 3000,
     hot: true,
     open: true,
+    historyApiFallback: true, // 支持React Router页面刷新
+    allowedHosts: 'all',
   },
   resolve: {
     extensions: ['.js', '.jsx'],
