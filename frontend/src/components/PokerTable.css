@@ -11,6 +11,11 @@
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  position: fixed;
+  top: 0;
+  left: 0;
+  margin: 0;
+  padding: 0;
 }
 
 /* 游戏头部 */
@@ -88,114 +93,15 @@
   }
 }
 
-/* 扑克桌面容器 */
-.table-container {
-  flex: 1;
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 20px;
-}
 
-/* 玩家区域布局 */
-.player-area {
-  position: absolute;
-  display: flex;
-  align-items: center;
-  gap: 15px;
-}
 
-.player-top {
-  top: 20px;
-  left: 50%;
-  transform: translateX(-50%);
-  flex-direction: column;
-}
 
-.player-bottom {
-  bottom: 150px;
-  left: 50%;
-  transform: translateX(-50%);
-  flex-direction: column;
-}
-
-.player-left {
-  left: 20px;
-  top: 50%;
-  transform: translateY(-50%);
-  flex-direction: row;
-}
-
-.player-right {
-  right: 20px;
-  top: 50%;
-  transform: translateY(-50%);
-  flex-direction: row-reverse;
-}
-
-/* 玩家信息 */
-.player-info {
-  background: rgba(0, 0, 0, 0.6);
-  padding: 12px 16px;
-  border-radius: 12px;
-  text-align: center;
-  min-width: 120px;
-  backdrop-filter: blur(10px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-}
-
-.player-name {
-  font-weight: bold;
-  font-size: 16px;
-  margin-bottom: 5px;
-  color: #ffd700;
-}
-
-.player-cards-count {
-  font-size: 14px;
-  color: #a0a0a0;
-}
-
-.dealer-badge {
-  background: #ffd700;
-  color: #000;
-  padding: 2px 8px;
-  border-radius: 10px;
-  font-size: 12px;
-  font-weight: bold;
-  margin-top: 5px;
-}
-
-/* 玩家手牌背面 */
-.player-cards-back {
-  display: flex;
-  gap: 2px;
-  flex-wrap: wrap;
-  max-width: 200px;
-}
-
-.card-back {
-  width: 24px;
-  height: 36px;
-  background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
-  border: 1px solid rgba(255, 255, 255, 0.3);
-  border-radius: 4px;
-  position: relative;
-}
-
-.card-back::before {
-  content: '🂠';
+/* 中央出牌区域 */
+.center-area {
   position: absolute;
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  font-size: 12px;
-  opacity: 0.7;
-}
-
-/* 中央出牌区域 */
-.center-area {
   width: 400px;
   height: 300px;
   background: rgba(0, 0, 0, 0.2);
@@ -205,6 +111,7 @@
   align-items: center;
   justify-content: center;
   backdrop-filter: blur(5px);
+  z-index: 10;
 }
 
 .played-cards {
@@ -249,10 +156,20 @@
 
 /* 我的手牌区域 */
 .my-hand-area {
+  position: fixed;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 100%;
+  max-width: 1200px;
   background: rgba(0, 0, 0, 0.4);
-  padding: 20px;
+  padding: 15px 20px;
   border-top: 1px solid rgba(255, 255, 255, 0.1);
   backdrop-filter: blur(10px);
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
 }
 
 .hand-controls {
@@ -378,8 +295,9 @@
     height: 200px;
   }
   
-  .player-cards-back {
-    max-width: 150px;
+  
+  .my-hand-area {
+    padding: 12px 15px;
   }
   
   .my-hand {
@@ -394,20 +312,25 @@
 
 @media (max-width: 768px) {
   .game-header {
-    padding: 10px 15px;
+    padding: 8px 10px;
     flex-direction: column;
-    gap: 10px;
+    gap: 8px;
   }
   
   .game-info {
-    gap: 15px;
+    gap: 10px;
     flex-wrap: wrap;
     justify-content: center;
   }
   
   .center-area {
-    width: 250px;
-    height: 150px;
+    width: 200px;
+    height: 120px;
+  }
+  
+  .my-hand-area {
+    padding: 8px 10px;
+    max-width: 100%;
   }
   
   .hand-card {
@@ -421,6 +344,156 @@
   
   .action-buttons {
     flex-direction: column;
-    gap: 10px;
+    gap: 8px;
+  }
+  
+  .action-btn {
+    padding: 8px 15px;
+    font-size: 14px;
   }
 }
+
+
+.other-player-hand {
+  position: absolute;
+  pointer-events: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+/* 顶部玩家 - 居中显示在顶部 */
+.other-player-hand.top {
+  top: 60px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 100%;             /* 使用整个屏幕宽度 */
+  max-width: 1200px;       /* 限制最大宽度 */
+  height: 150px;           /* 给容器明确的高度 */
+  position: absolute;      /* 确保绝对定位 */
+  text-align: center;
+}
+
+/* 左侧玩家 - 居中显示在左侧 */
+.other-player-hand.left {
+  top: 50%;
+  left: 50px;
+  transform: translateY(-50%);
+  width: 200px;            /* 给容器明确的宽度 */
+  height: 400px;           /* 给容器明确的高度 */
+  position: absolute;      /* 确保绝对定位 */
+}
+
+/* 右侧玩家 - 居中显示在右侧 */
+.other-player-hand.right {
+  top: 50%;
+  right: 50px;
+  transform: translateY(-50%);
+  width: 200px;            /* 与左侧相同的容器宽度 */
+  height: 400px;           /* 与左侧相同的容器高度 */
+  position: absolute;      /* 确保绝对定位 */
+}
+
+/* 玩家信息样式 */
+.player-info {
+  text-align: center;
+  color: white;
+  font-weight: bold;
+  position: relative;
+  z-index: 1000;
+  background: rgba(0, 0, 0, 0.8);
+  border-radius: 15px;
+  padding: 12px 16px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  border: 2px solid rgba(255, 255, 255, 0.2);
+  backdrop-filter: blur(5px);
+  min-width: 120px;
+  white-space: nowrap;
+}
+
+.player-name {
+  display: block;
+  font-size: 16px;
+  color: #ffd700;
+  margin-bottom: 5px;
+  text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.8);
+}
+
+.current-turn-indicator {
+  margin-left: 8px;
+  font-size: 18px;
+  animation: pulse 1.5s infinite;
+}
+
+/* 不同方向玩家信息栏的位置调整 */
+.other-player-hand.top .player-info {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);  /* 水平和垂直居中 */
+  z-index: 1001;           /* 确保在手牌上方 */
+  margin-bottom: 0;        /* 移除下边距 */
+  width: auto;             /* 自动宽度 */
+  text-align: center;      /* 文本居中 */
+}
+
+/* 顶部玩家的手牌也要居中重叠 */
+.other-player-hand.top .hand-cards-top {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);  /* 水平和垂直居中 */
+  z-index: 1000;           /* 在玩家信息下方 */
+}
+
+.other-player-hand.left .player-info {
+  position: absolute;
+  top: 50%;
+  left: 0px;               /* 相对于容器左边对齐 */
+  transform: translateY(-50%);  /* 只垂直居中 */
+  z-index: 1001;           /* 确保在手牌上方 */
+  margin-bottom: 0;        /* 移除下边距 */
+  width: 120px;            /* 与手牌容器相同宽度 */
+  text-align: center;      /* 文本居中 */
+}
+
+/* 左侧玩家的手牌也要居中重叠 */
+.other-player-hand.left .hand-cards-left {
+  position: absolute;
+  top: 50%;
+  left: 0px;               /* 相对于容器左边对齐 */
+  transform: translateY(-50%);  /* 只垂直居中 */
+  z-index: 1000;           /* 在玩家信息下方 */
+}
+
+.other-player-hand.right .player-info {
+  position: absolute;
+  top: 50%;
+  right: 0px;              /* 相对于容器右边对齐 */
+  transform: translateY(-50%);  /* 只垂直居中 */
+  z-index: 1001;           /* 确保在手牌上方 */
+  margin-bottom: 0;        /* 移除下边距 */
+  width: 120px;            /* 与手牌容器相同宽度 */
+  text-align: center;      /* 文本居中 */
+}
+
+/* 右侧玩家的手牌也要居中重叠 */
+.other-player-hand.right .hand-cards-right {
+  position: absolute;
+  top: 50%;
+  right: 0px;              /* 相对于容器右边对齐 */
+  transform: translateY(-50%);  /* 只垂直居中 */
+  z-index: 1000;           /* 在玩家信息下方 */
+}
+
+@keyframes pulse {
+  0%, 100% { 
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% { 
+    transform: scale(1.3);
+    opacity: 0.8;
+  }
+}
+

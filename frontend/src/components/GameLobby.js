@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import socketService from '../services/socketService';
-import { io } from 'socket.io-client';
 import './GameLobby.css';
 
 const GameLobby = () => {
@@ -21,9 +20,6 @@ const GameLobby = () => {
     const connectSocket = async () => {
       try {
         console.log('🎯 开始连接Socket服务器:', process.env.REACT_APP_SERVER_URL || 'http://localhost:3001');
-        
-        // 直接测试Socket.io导入
-        console.log('🧪 测试socket.io导入:', typeof io);
         
         const socket = socketService.connect();
         console.log('🔗 GameLobby获取到Socket实例:', socket?.connected);

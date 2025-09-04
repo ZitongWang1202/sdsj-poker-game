@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import socketService from '../services/socketService';
 import { sortCards, getCardDisplayName } from '../utils/cardUtils';
+import HandCards from './HandCards';
+import { getCardBackPath } from '../utils/cardAssets';
 import './PokerTable.css';
 
 const PokerTable = () => {
@@ -176,6 +178,7 @@ const PokerTable = () => {
     }
   };
 
+
   return (
     <div className="poker-table">
       {/* 添加加载检查 */}
@@ -208,48 +211,54 @@ const PokerTable = () => {
             </div>
           )}
 
-          {/* 扑克桌面 */}
-          <div className="table-container">
-            {/* 其他玩家位置 */}
-            {room.players.map((player, index) => {
-              if (index === myPosition) return null;
-              const position = getPlayerPosition(index);
-
-              return (
-                <div key={player.socketId} className={`player-area player-${position}`}>
-                  <div className="player-info">
-                    <div className="player-name">{player.name}</div>
-                    <div className="player-cards-count">{player.cardCount || 26}张</div>
-                    {player.isDealer && <div className="dealer-badge">庄</div>}
-                  </div>
-                  <div className="player-cards-back">
-                    {/* 显示背面卡牌 */}
-                    {Array.from({ length: Math.min(player.cardCount || 26, 13) }, (_, i) => (
-                      <div key={i} className="card-back"></div>
+          {/* 中央出牌区域 */}
+          <div className="center-area">
+            <div className="played-cards">
+              {playedCards.map((play, index) => (
+                <div key={index} className="played-card-group">
+                  <div className="player-label">{play.playerName}</div>
+                  <div className="cards-group">
+                    {play.cards.map((card, cardIndex) => (
+                      <div key={cardIndex} className="played-card">
+                        {getCardDisplayName(card)}
+                      </div>
                     ))}
                   </div>
                 </div>
-              );
-            })}
-
-            {/* 中央出牌区域 */}
-            <div className="center-area">
-              <div className="played-cards">
-                {playedCards.map((play, index) => (
-                  <div key={index} className="played-card-group">
-                    <div className="player-label">{play.playerName}</div>
-                    <div className="cards-group">
-                      {play.cards.map((card, cardIndex) => (
-                        <div key={cardIndex} className="played-card">
-                          {getCardDisplayName(card)}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
+              ))}
             </div>
           </div>
+
+          {/* 其他玩家手牌 - 直接渲染每个玩家 */}
+          {room && room.players && room.players.filter((_, index) => index !== myPosition).map((player) => {
+            const playerIndex = room.players.findIndex(p => p.socketId === player.socketId);
+            const position = getPlayerPosition(playerIndex);
+            
+            // 为其他玩家创建虚拟的卡牌背面
+            const cardBacks = Array.from({ length: player.cards?.length || 0 }, (_, i) => ({
+              suit: 'BACK',
+              rank: 'BACK',
+              id: `back-${playerIndex}-${i}`
+            }));
+
+            return (
+              <div key={player.socketId} className={`other-player-hand ${position}`}>
+                <div className="player-info">
+                  <span className="player-name">{player.name}</span>
+                  {gameState?.currentTurn === playerIndex && (
+                    <span className="current-turn-indicator">🎯</span>
+                  )}
+                </div>
+                <HandCards
+                  cards={cardBacks}
+                  selectedCards={[]}
+                  onCardClick={() => {}} // 其他玩家的牌不可点击
+                  isMyTurn={false}
+                  position={position}
+                />
+              </div>
+            );
+          })}
 
           {/* 我的手牌区域 */}
           <div className="my-hand-area">
@@ -274,19 +283,14 @@ const PokerTable = () => {
               )}
             </div>
 
-            <div className="my-hand">
-              {myCards.map((card, index) => (
-                <div
-                  key={card.id}
-                  className={`hand-card ${selectedCards.includes(index) ? 'selected' : ''}`}
-                  onClick={() => toggleCardSelection(index)}
-                >
-                  <div className="card-content">
-                    {getCardDisplayName(card)}
-                  </div>
-                </div>
-              ))}
-            </div>
+            {/* 使用新的HandCards组件显示我的手牌 */}
+            <HandCards
+              cards={myCards}
+              selectedCards={selectedCards}
+              onCardClick={toggleCardSelection}
+              isMyTurn={gameState?.currentTurn === myPosition}
+              position="bottom"
+            />
           </div>
 
           {myCards.length === 0 && (

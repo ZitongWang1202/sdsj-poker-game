@@ -1,0 +1,180 @@
+/* 手牌容器样式 */
+.hand-cards {
+  position: relative;
+  display: inline-block;
+  min-height: 120px;
+  min-width: 100px;
+}
+
+/* 底部玩家手牌（自己） */
+.hand-cards-bottom {
+  width: 100%;
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 10px 0;
+  display: flex;
+  justify-content: center;
+  position: relative;
+}
+
+/* 顶部玩家手牌 */
+.hand-cards-top {
+  width: 100%;
+  max-width: 600px;
+  margin: 0 auto;
+  padding: 10px 0;
+  transform: scale(0.7);
+  transform-origin: center top;
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+/* 左侧玩家手牌 */
+.hand-cards-left {
+  height: 400px;
+  width: 120px;
+  padding: 10px 0;
+  transform-origin: left center;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+}
+
+/* 右侧玩家手牌 */
+.hand-cards-right {
+  height: 400px;
+  width: 120px;
+  padding: 10px 0;
+  transform-origin: right center;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+}
+
+/* 卡牌样式 */
+.hand-card-item {
+  width: 80px;
+  height: 112px;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  overflow: hidden;
+  background: white;
+  border: 2px solid transparent;
+  user-select: none;
+}
+
+/* 卡牌图片 */
+.hand-card-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  pointer-events: none;
+}
+
+/* 可点击的卡牌悬停效果 */
+.hand-cards.my-turn .hand-card-item:hover {
+  transform: translateY(-10px) scale(1.05);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+  border-color: #4CAF50;
+  z-index: 1000;
+}
+
+/* 选中的卡牌样式 */
+.hand-card-item.selected {
+  border-color: #ff4444;
+  box-shadow: 0 4px 16px rgba(255, 68, 68, 0.4);
+  transform: translateY(-15px);
+}
+
+/* 选中状态的悬停效果 */
+.hand-cards.my-turn .hand-card-item.selected:hover {
+  transform: translateY(-20px) scale(1.05);
+  border-color: #ff2222;
+}
+
+
+/* 响应式设计 */
+@media (max-width: 1024px) {
+  .hand-card-item {
+    width: 60px;
+    height: 84px;
+  }
+  
+  .hand-cards-bottom {
+    max-width: 700px;
+  }
+  
+  .hand-cards-top {
+    max-width: 500px;
+    transform: scale(0.6);
+  }
+}
+
+@media (max-width: 768px) {
+  .hand-card-item {
+    width: 50px;
+    height: 70px;
+  }
+  
+  .hand-cards-bottom {
+    max-width: 600px;
+  }
+  
+  .hand-cards-top {
+    max-width: 400px;
+    transform: scale(0.5);
+  }
+  
+  .hand-cards-left,
+  .hand-cards-right {
+    height: 300px;
+    width: 80px;
+  }
+}
+
+/* 动画效果 */
+@keyframes cardDeal {
+  from {
+    transform: translateY(-50px) rotate(180deg);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0) rotate(0deg);
+    opacity: 1;
+  }
+}
+
+.hand-card-item {
+  animation: cardDeal 0.5s ease-out;
+}
+
+/* 发牌延迟动画 */
+.hand-card-item:nth-child(1) { animation-delay: 0.1s; }
+.hand-card-item:nth-child(2) { animation-delay: 0.15s; }
+.hand-card-item:nth-child(3) { animation-delay: 0.2s; }
+.hand-card-item:nth-child(4) { animation-delay: 0.25s; }
+.hand-card-item:nth-child(5) { animation-delay: 0.3s; }
+.hand-card-item:nth-child(6) { animation-delay: 0.35s; }
+.hand-card-item:nth-child(7) { animation-delay: 0.4s; }
+.hand-card-item:nth-child(8) { animation-delay: 0.45s; }
+.hand-card-item:nth-child(9) { animation-delay: 0.5s; }
+.hand-card-item:nth-child(10) { animation-delay: 0.55s; }
+
+/* 其他玩家的卡牌背面效果 */
+.hand-cards-top .hand-card-item,
+.hand-cards-left .hand-card-item,
+.hand-cards-right .hand-card-item {
+  cursor: default;
+}
+
+.hand-cards-top .hand-card-item:hover,
+.hand-cards-left .hand-card-item:hover,
+.hand-cards-right .hand-card-item:hover {
+  transform: none;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  border-color: transparent;
+}

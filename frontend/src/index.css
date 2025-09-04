@@ -1,12 +1,14 @@
 /* 全局样式 */
 body {
   margin: 0;
+  padding: 0;
   font-family: 'Microsoft YaHei', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
     'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   min-height: 100vh;
+  overflow: hidden; /* 防止body出现滚动条 */
 }
 
 * {
@@ -15,6 +17,12 @@ body {
 
 #root {
   min-height: 100vh;
+  padding: 0; /* 移除padding */
+  overflow: hidden; /* 防止root出现滚动条 */
+}
+
+/* 为GameLobby页面添加特殊的padding */
+.game-lobby {
   padding: 20px 0;
 }
 
