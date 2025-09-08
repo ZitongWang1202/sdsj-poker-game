@@ -136,33 +136,14 @@
   }
 }
 
-/* 动画效果 */
-@keyframes cardDeal {
-  from {
-    transform: translateY(-50px) rotate(180deg);
-    opacity: 0;
-  }
-  to {
-    transform: translateY(0) rotate(0deg);
-    opacity: 1;
-  }
-}
-
+/* 动画效果已移除 - 卡牌直接显示 */
 .hand-card-item {
-  animation: cardDeal 0.5s ease-out;
+  /* 取消发牌动画，卡牌直接显示 */
+  opacity: 1;
+  transform: translateY(0);
 }
 
-/* 发牌延迟动画 */
-.hand-card-item:nth-child(1) { animation-delay: 0.1s; }
-.hand-card-item:nth-child(2) { animation-delay: 0.15s; }
-.hand-card-item:nth-child(3) { animation-delay: 0.2s; }
-.hand-card-item:nth-child(4) { animation-delay: 0.25s; }
-.hand-card-item:nth-child(5) { animation-delay: 0.3s; }
-.hand-card-item:nth-child(6) { animation-delay: 0.35s; }
-.hand-card-item:nth-child(7) { animation-delay: 0.4s; }
-.hand-card-item:nth-child(8) { animation-delay: 0.45s; }
-.hand-card-item:nth-child(9) { animation-delay: 0.5s; }
-.hand-card-item:nth-child(10) { animation-delay: 0.55s; }
+/* 发牌延迟动画已移除 - 卡牌直接显示 */
 
 /* 其他玩家的卡牌背面效果 */
 .hand-cards-top .hand-card-item,

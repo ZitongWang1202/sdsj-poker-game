@@ -35,12 +35,17 @@
   align-items: center;
 }
 
-.room-info, .phase-info, .trump-info {
+.room-info, .phase-info, .trump-info, .level-info, .turn-info {
   background: rgba(255, 255, 255, 0.1);
   padding: 8px 16px;
   border-radius: 20px;
   font-weight: 500;
   backdrop-filter: blur(5px);
+}
+
+.level-info {
+  background: rgba(0, 191, 255, 0.2);
+  border: 1px solid rgba(0, 191, 255, 0.3);
 }
 
 .trump-info {
@@ -102,12 +107,14 @@
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  width: 400px;
-  height: 300px;
-  background: rgba(0, 0, 0, 0.2);
-  border: 2px solid rgba(255, 255, 255, 0.2);
-  border-radius: 20px;
+  min-width: 300px;
+  min-height: 200px;
+  background: rgba(0, 100, 0, 0.1);
+  border: 2px dashed rgba(255, 255, 255, 0.3);
+  border-radius: 15px;
+  padding: 20px;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
   backdrop-filter: blur(5px);
@@ -115,27 +122,82 @@
 }
 
 .played-cards {
-  display: flex;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
   gap: 20px;
-  flex-wrap: wrap;
-  justify-content: center;
-  align-items: center;
+  width: 100%;
+  max-width: 400px;
 }
 
 .played-card-group {
-  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+}
+
+.played-card-group.position-bottom {
+  grid-column: 1 / -1;
+  grid-row: 2;
+}
+
+.played-card-group.position-left {
+  grid-column: 1;
+  grid-row: 1;
+}
+
+.played-card-group.position-top {
+  grid-column: 1 / -1;
+  grid-row: 1;
+}
+
+.played-card-group.position-right {
+  grid-column: 2;
+  grid-row: 1;
 }
 
 .player-label {
   font-size: 12px;
-  color: #ffd700;
-  margin-bottom: 5px;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.6);
+  padding: 2px 8px;
+  border-radius: 10px;
+  white-space: nowrap;
   font-weight: 500;
 }
 
 .cards-group {
   display: flex;
-  gap: 3px;
+  gap: 2px;
+  align-items: center;
+}
+
+.played-card {
+  position: relative;
+}
+
+.played-card-image {
+  width: 50px;
+  height: auto;
+  border-radius: 6px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  transition: all 0.3s ease;
+}
+
+.played-card:hover .played-card-image {
+  transform: scale(1.1);
+  z-index: 100;
+}
+
+.round-info {
+  margin-top: 15px;
+  font-size: 14px;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.7);
+  padding: 5px 15px;
+  border-radius: 15px;
+  text-align: center;
 }
 
 .played-card {
@@ -204,21 +266,77 @@
 .trump-btn {
   background: linear-gradient(135deg, #ffd700 0%, #ffed4e 100%);
   color: #000;
+  transition: all 0.3s ease;
 }
 
-.trump-btn:hover {
+.trump-btn:hover:not(:disabled) {
   transform: scale(1.05);
   box-shadow: 0 5px 15px rgba(255, 215, 0, 0.4);
+}
+
+.trump-btn.valid {
+  background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+  color: white;
+  animation: validPulse 2s infinite;
+}
+
+.trump-btn.invalid {
+  background: linear-gradient(135deg, #6c757d 0%, #adb5bd 100%);
+  color: white;
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.trump-btn:disabled {
+  transform: none;
+  cursor: not-allowed;
+}
+
+@keyframes validPulse {
+  0%, 100% { 
+    box-shadow: 0 5px 15px rgba(40, 167, 69, 0.4);
+  }
+  50% { 
+    box-shadow: 0 8px 25px rgba(40, 167, 69, 0.7);
+  }
 }
 
 .play-btn {
   background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
   color: white;
+  transition: all 0.3s ease;
 }
 
-.play-btn:hover {
+.play-btn:hover:not(:disabled) {
   transform: scale(1.05);
   box-shadow: 0 5px 15px rgba(40, 167, 69, 0.4);
+}
+
+.play-btn.valid {
+  background: linear-gradient(135deg, #007bff 0%, #6610f2 100%);
+  color: white;
+  animation: playPulse 2s infinite;
+}
+
+.play-btn.invalid {
+  background: linear-gradient(135deg, #6c757d 0%, #adb5bd 100%);
+  color: white;
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.play-btn:disabled {
+  transform: none;
+  cursor: not-allowed;
+}
+
+@keyframes playPulse {
+  0%, 100% { 
+    box-shadow: 0 5px 15px rgba(0, 123, 255, 0.4);
+  }
+  50% { 
+    box-shadow: 0 8px 25px rgba(0, 123, 255, 0.7);
+  }
 }
 
 .cancel-btn {

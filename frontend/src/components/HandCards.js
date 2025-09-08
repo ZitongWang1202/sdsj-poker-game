@@ -56,14 +56,12 @@ const HandCards = ({
       case 'left': // 左侧玩家
         style.top = `${index * (offset * 0.8)}px`;
         style.left = '0px';
-        style.transform = 'rotate(90deg)';
-        style.transformOrigin = 'center';
+        // 取消旋转效果
         break;
       case 'right': // 右侧玩家
         style.top = `${index * (offset * 0.8)}px`;
         style.right = '0px';
-        style.transform = 'rotate(-90deg)';
-        style.transformOrigin = 'center';
+        // 取消旋转效果
         break;
       default:
         style.left = `${index * offset}px`;

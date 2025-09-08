@@ -28,6 +28,84 @@ const io = socketIo(server, {
 const GameManager = require('./controllers/GameManager');
 const gameManager = new GameManager();
 
+// 逐张发牌动画函数
+function startDealingAnimation(io, roomId, gameManager) {
+  console.log(`⏰ 开始逐张发牌动画 - 房间: ${roomId}`);
+  const room = gameManager.getRoom(roomId);
+  
+  if (!room || !room.game) {
+    console.log(`❌ 房间 ${roomId} 或游戏实例不存在`);
+    return;
+  }
+
+  console.log(`🎴 房间 ${roomId} 游戏实例存在，开始逐张发牌`);
+  console.log(`👥 房间内玩家数量: ${room.players.length}`);
+  
+  // 创建发牌序列：真正一张一张发牌
+  const totalCardsPerPlayer = 26; // 每人26张牌
+  const totalCards = totalCardsPerPlayer * room.players.length; // 总共104张牌
+  let currentCardIndex = 0;
+  
+  const dealInterval = setInterval(() => {
+    if (currentCardIndex >= totalCards) {
+      // 发牌完成
+      clearInterval(dealInterval);
+      console.log(`🎉 发牌完成 - 房间: ${roomId}`);
+      
+      // 发送发牌完成事件
+      room.players.forEach((player, index) => {
+        const playerSocket = io.sockets.sockets.get(player.socketId);
+        if (playerSocket) {
+          const dealData = {
+            cards: player.cards,
+            playerPosition: index,
+            gameState: room.game.getGameState(),
+            dealingComplete: true
+          };
+          console.log(`📤 发送最终cardsDealt事件给 ${player.name}`);
+          playerSocket.emit('cardsDealt', dealData);
+        }
+      });
+      
+      return;
+    }
+    
+    // 计算当前应该发给哪个玩家
+    const playerIndex = currentCardIndex % room.players.length;
+    const playerCardIndex = Math.floor(currentCardIndex / room.players.length);
+    const player = room.players[playerIndex];
+    
+    if (player && playerCardIndex < player.cards.length) {
+      const card = player.cards[playerCardIndex];
+      
+      // 发送单张牌事件给所有玩家（用于动画效果）
+      io.to(roomId).emit('cardDealt', {
+        toPlayer: playerIndex,
+        cardIndex: playerCardIndex,
+        totalDealt: currentCardIndex + 1,
+        totalCards: totalCards,
+        playerCardIndex: playerCardIndex + 1,
+        totalPlayerCards: totalCardsPerPlayer
+      });
+      
+      // 只给目标玩家发送实际牌面信息
+      const playerSocket = io.sockets.sockets.get(player.socketId);
+      if (playerSocket) {
+        playerSocket.emit('cardReceived', {
+          card: card,
+          cardIndex: playerCardIndex,
+          totalReceived: playerCardIndex + 1,
+          totalPlayerCards: totalCardsPerPlayer
+        });
+      }
+      
+      console.log(`🃏 第${currentCardIndex + 1}张牌：给玩家 ${player.name} 发第${playerCardIndex + 1}张牌`);
+    }
+    
+    currentCardIndex++;
+  }, 1000); // 每秒发一张牌
+}
+
 // Socket.io连接处理
 io.on('connection', (socket) => {
   console.log('✅ 新客户端连接成功:', socket.id);
@@ -63,33 +141,9 @@ io.on('connection', (socket) => {
           room: result.room
         });
         
-        // 发牌给每个玩家
+        // 开始逐张发牌动画
         setTimeout(() => {
-          console.log(`⏰ 开始发牌流程 - 房间: ${roomId}`);
-          const room = gameManager.getRoom(roomId);
-          if (room && room.game) {
-            console.log(`🎴 房间 ${roomId} 游戏实例存在，开始发牌`);
-            console.log(`👥 房间内玩家数量: ${room.players.length}`);
-            
-            room.players.forEach((player, index) => {
-              const playerSocket = io.sockets.sockets.get(player.socketId);
-              console.log(`🃏 给玩家 ${player.name} (位置${index}) 发牌 ${player.cards?.length || 0} 张`);
-              
-              if (playerSocket) {
-                const dealData = {
-                  cards: player.cards,
-                  playerPosition: index,
-                  gameState: room.game.getGameState()
-                };
-                console.log(`📤 发送cardsDealt事件给 ${player.name}:`, dealData);
-                playerSocket.emit('cardsDealt', dealData);
-              } else {
-                console.log(`❌ 玩家 ${player.name} 的Socket连接不存在`);
-              }
-            });
-          } else {
-            console.log(`❌ 房间 ${roomId} 或游戏实例不存在`);
-          }
+          startDealingAnimation(io, roomId, gameManager);
         }, 2000); // 延长到2秒，确保前端准备好
         
         console.log(`房间 ${roomId} 游戏开始，已发牌`);

@@ -172,6 +172,11 @@ class SocketService {
     console.log('🔄 Socket不存在，创建新连接...');
     return this.connect();
   }
+
+  // 获取socket ID
+  getSocketId() {
+    return this.socket ? this.socket.id : null;
+  }
 }
 
 // 创建单例
