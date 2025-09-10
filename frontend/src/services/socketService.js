@@ -82,6 +82,7 @@ class SocketService {
     return this.socket;
   }
 
+
   // 断开连接
   disconnect() {
     if (this.socket) {

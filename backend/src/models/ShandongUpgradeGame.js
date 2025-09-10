@@ -1,10 +1,14 @@
 const Card = require('./Card');
 
 class ShandongUpgradeGame {
-  constructor(players) {
+  constructor(players, debugMode = false, presetCards = null) {
     this.players = players;
     this.currentLevel = 2; // 当前级别
     this.trumpSuit = null; // 主牌花色
+    this.trumpPlayer = null; // 亮主玩家
+    this.trumpRank = null; // 主牌级别
+    this.counterTrumpPlayer = null; // 反主玩家
+    this.counterTrumpEndTime = null; // 反主结束时间
     this.deck = [];
     this.bottomCards = []; // 底牌 (4张)
     this.currentRound = 0;
@@ -16,6 +20,10 @@ class ShandongUpgradeGame {
     
     // 山东升级特色：2,3,5为常主
     this.permanentTrumps = [2, 3, 5];
+    
+    // 调试模式
+    this.debugMode = debugMode;
+    this.presetCards = presetCards;
     
     this.initializeGame();
   }
@@ -60,22 +68,43 @@ class ShandongUpgradeGame {
   dealCards() {
     const cardsPerPlayer = 26;
     
-    // 给每个玩家发牌
-    for (let i = 0; i < this.players.length; i++) {
-      const playerCards = this.deck.slice(i * cardsPerPlayer, (i + 1) * cardsPerPlayer);
-      this.players[i].receiveCards(playerCards);
+    // 如果是调试模式且有预设手牌，使用预设手牌
+    if (this.debugMode && this.presetCards) {
+      console.log('🎯 调试模式：使用预设手牌');
+      for (let i = 0; i < this.players.length; i++) {
+        if (this.presetCards[i]) {
+          this.players[i].receiveCards(this.presetCards[i]);
+        } else {
+          // 如果没有预设手牌，使用随机发牌
+          const playerCards = this.deck.slice(i * cardsPerPlayer, (i + 1) * cardsPerPlayer);
+          this.players[i].receiveCards(playerCards);
+        }
+      }
+    } else {
+      // 正常发牌
+      for (let i = 0; i < this.players.length; i++) {
+        const playerCards = this.deck.slice(i * cardsPerPlayer, (i + 1) * cardsPerPlayer);
+        this.players[i].receiveCards(playerCards);
+      }
     }
     
     // 剩余4张作为底牌
     this.bottomCards = this.deck.slice(this.players.length * cardsPerPlayer);
     
-    this.gamePhase = 'bidding';
+    // 发牌阶段，允许亮主
+    this.gamePhase = 'dealing';
   }
 
   // 亮主 (山东升级：需要一王带一对)
   declareTrump(playerId, cards) {
-    if (this.gamePhase !== 'bidding') {
+    // 允许在发牌阶段和亮主阶段亮主
+    if (this.gamePhase !== 'bidding' && this.gamePhase !== 'dealing') {
       return { success: false, message: '不在亮主阶段' };
+    }
+
+    // 检查是否已经有人亮主
+    if (this.trumpSuit !== null) {
+      return { success: false, message: '已经有人亮主了' };
     }
 
     const player = this.players[playerId];
@@ -130,15 +159,19 @@ class ShandongUpgradeGame {
     // 设置主牌信息
     this.trumpSuit = trumpSuit;
     this.trumpRank = pairRank;
+    this.trumpPlayer = playerId;
     this.dealer = playerId;
+    
+    // 设置反主时间窗口
+    this.setCounterTrumpWindow();
     
     // 标记为庄家
     this.players.forEach((p, index) => {
       p.setDealer(index === playerId);
     });
 
-    // 简化流程：亮主后直接进入出牌阶段
-    this.gamePhase = 'playing';
+    // 亮主后进入出牌阶段
+    this.gamePhase = 'bidding';
     this.currentTurn = playerId; // 庄家先出牌
 
     console.log(`玩家 ${player.name} 亮主成功: ${trumpSuit} ${pairRank}`);
@@ -147,7 +180,97 @@ class ShandongUpgradeGame {
       success: true, 
       trumpSuit: trumpSuit,
       trumpRank: pairRank,
-      dealer: playerId
+      dealer: playerId,
+      counterTrumpEndTime: this.counterTrumpEndTime
+    };
+  }
+
+  // 设置反主时间窗口
+  setCounterTrumpWindow() {
+    // 如果是在发牌阶段亮主，反主时间到发牌结束+10秒
+    // 如果是在发牌结束后亮主，反主时间从亮主开始+10秒
+    const now = Date.now();
+    this.counterTrumpEndTime = now + 10000; // 10秒后结束反主
+    console.log(`设置反主时间窗口，结束时间: ${new Date(this.counterTrumpEndTime).toLocaleTimeString()}`);
+  }
+
+  // 反主 (用一对王反主)
+  counterTrump(playerId, cards) {
+    // 检查是否在反主时间窗口内
+    if (this.counterTrumpEndTime && Date.now() > this.counterTrumpEndTime) {
+      return { success: false, message: '反主时间已过' };
+    }
+
+    // 检查是否已经有人反主
+    if (this.counterTrumpPlayer !== null) {
+      return { success: false, message: '已经有人反主了' };
+    }
+
+    const player = this.players[playerId];
+    if (!player) {
+      return { success: false, message: '玩家不存在' };
+    }
+
+    // 反主规则: 必须是一对王（大王对或小王对）加上一对牌
+    if (cards.length !== 4) {
+      return { success: false, message: '反主需要选择4张牌（一对王+一对牌）' };
+    }
+
+    // 检查是否有王牌
+    const jokers = cards.filter(card => card.suit === 'joker');
+    const normalCards = cards.filter(card => card.suit !== 'joker');
+
+    if (jokers.length !== 2) {
+      return { success: false, message: '反主必须包含一对王牌' };
+    }
+
+    if (normalCards.length !== 2) {
+      return { success: false, message: '反主必须包含一对普通牌' };
+    }
+
+    // 检查王牌是否是一对（相同等级的王）
+    const [joker1, joker2] = jokers;
+    if (joker1.rank !== joker2.rank) {
+      return { success: false, message: '王牌必须是一对相同的王' };
+    }
+
+    // 检查普通牌是否是一对（相同点数）
+    const [normal1, normal2] = normalCards;
+    if (normal1.rank !== normal2.rank) {
+      return { success: false, message: '普通牌必须是一对（相同点数）' };
+    }
+
+    // 检查玩家是否确实拥有这些牌
+    const playerCardIds = player.cards.map(c => c.id);
+    const hasAllCards = cards.every(card => 
+      playerCardIds.includes(card.id)
+    );
+
+    if (!hasAllCards) {
+      return { success: false, message: '你没有这些牌' };
+    }
+
+    // 反主成功
+    this.counterTrumpPlayer = playerId;
+    this.trumpPlayer = playerId;
+    this.dealer = playerId;
+    
+    // 重新设置反主时间窗口（反主后还可以再反主）
+    this.setCounterTrumpWindow();
+    
+    // 更新庄家标记
+    this.players.forEach((p, index) => {
+      p.setDealer(index === playerId);
+    });
+
+    console.log(`玩家 ${player.name} 反主成功: 一对${joker1.rank === 'big' ? '大王' : '小王'} + 一对${normal1.rank}`);
+
+    return { 
+      success: true, 
+      counterTrumpRank: joker1.rank,
+      counterTrumpPair: normal1.rank,
+      newDealer: playerId,
+      counterTrumpEndTime: this.counterTrumpEndTime
     };
   }
 
@@ -294,6 +417,10 @@ class ShandongUpgradeGame {
     return {
       currentLevel: this.currentLevel,
       trumpSuit: this.trumpSuit,
+      trumpRank: this.trumpRank,
+      trumpPlayer: this.trumpPlayer,
+      counterTrumpPlayer: this.counterTrumpPlayer,
+      counterTrumpEndTime: this.counterTrumpEndTime,
       gamePhase: this.gamePhase,
       currentTurn: this.currentTurn,
       dealer: this.dealer,

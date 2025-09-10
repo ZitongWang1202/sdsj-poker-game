@@ -16,6 +16,8 @@ const PokerTable = () => {
   const [gameMessage, setGameMessage] = useState('');
   const [playedCards, setPlayedCards] = useState([]); // 桌面上的牌
   const [room, setRoom] = useState(null); // 房间信息
+  const [trumpCountdown, setTrumpCountdown] = useState(null);
+  const [counterTrumpCountdown, setCounterTrumpCountdown] = useState(null);
 
   useEffect(() => {
     console.log('🎮 PokerTable组件挂载 - roomId:', roomId);
@@ -71,11 +73,19 @@ const PokerTable = () => {
         }
       }, 'PokerTable');
 
+
+      // 处理发牌开始事件
+      socketService.on('dealingStarted', (data) => {
+        console.log('🎴 发牌开始:', data);
+        setGameState(data.gameState);
+        setGameMessage('🎴 发牌开始，可以开始选择亮主牌');
+      }, 'PokerTable');
+
       // 处理逐张发牌动画
       socketService.on('cardDealt', (data) => {
         console.log('🃏 收到单张发牌事件:', data);
         const { toPlayer, totalDealt, totalCards, playerCardIndex, totalPlayerCards } = data;
-        setGameMessage(`🎴 发牌中... 第${totalDealt}/${totalCards}张 (每人${totalPlayerCards}张)`);
+        setGameMessage(`🎴 发牌中... 第${totalDealt}/${totalCards}张`);
         
         // TODO: 添加发牌动画效果
       }, 'PokerTable');
@@ -95,7 +105,7 @@ const PokerTable = () => {
         setGameMessage(`🎴 发牌中... 您已收到 ${totalReceived}/${totalPlayerCards} 张牌`);
         
         if (totalReceived === totalPlayerCards) {
-          setGameMessage('📋 发牌完成！查看你的手牌，准备亮主');
+          setGameMessage('📋 发牌完成！');
         }
       }, 'PokerTable');
 
@@ -109,7 +119,20 @@ const PokerTable = () => {
           setMyCards(sortCards(cards));
           setMyPosition(playerPosition);
           setGameState(gameState);
-          setGameMessage('📋 发牌完成！查看你的手牌，准备亮主');
+          setGameMessage('📋 发牌完成！');
+          
+          // 启动10秒亮主倒计时
+          setTrumpCountdown(10);
+          const countdownInterval = setInterval(() => {
+            setTrumpCountdown(prev => {
+              if (prev <= 1) {
+                clearInterval(countdownInterval);
+                setGameMessage('⏰ 亮主时间结束，游戏继续');
+                return null;
+              }
+              return prev - 1;
+            });
+          }, 1000);
         }
       }, 'PokerTable');
 
@@ -117,6 +140,27 @@ const PokerTable = () => {
         console.log('🎺 收到亮主事件:', data);
         setGameMessage(`🎺 ${data.playerName} 亮主: ${data.trumpSuit}`);
         setGameState(data.gameState);
+        setTrumpCountdown(null); // 清除倒计时
+        
+        // 启动反主倒计时
+        if (data.counterTrumpEndTime) {
+          const now = Date.now();
+          const timeLeft = Math.max(0, Math.ceil((data.counterTrumpEndTime - now) / 1000));
+          if (timeLeft > 0) {
+            setCounterTrumpCountdown(timeLeft);
+            const countdownInterval = setInterval(() => {
+              setCounterTrumpCountdown(prev => {
+                if (prev <= 1) {
+                  clearInterval(countdownInterval);
+                  setGameMessage('⏰ 反主时间结束，游戏继续');
+                  return null;
+                }
+                return prev - 1;
+              });
+            }, 1000);
+          }
+        }
+        
         // 重新排序手牌（根据主牌）
         if (myCards.length > 0) {
           setMyCards(sortCards(myCards, gameState?.currentLevel, data.trumpSuit));
@@ -156,6 +200,26 @@ const PokerTable = () => {
         setGameMessage(`❌ 亮主失败: ${error}`);
       }, 'PokerTable');
 
+      socketService.on('trumpTimeEnded', (data) => {
+        console.log('⏰ 亮主时间结束:', data);
+        setGameMessage('⏰ 亮主时间结束，游戏继续');
+        setGameState(data.gameState);
+        setTrumpCountdown(null);
+      }, 'PokerTable');
+
+      // 处理反主事件
+      socketService.on('counterTrumpDeclared', (data) => {
+        console.log('🔄 收到反主事件:', data);
+        setGameMessage(`🔄 ${data.playerName} 反主成功: 一对${data.counterTrumpRank === 'big' ? '大王' : '小王'} + 一对${data.counterTrumpPair}`);
+        setGameState(data.gameState);
+        setCounterTrumpCountdown(null); // 清除反主倒计时
+      }, 'PokerTable');
+
+      socketService.on('counterTrumpError', (error) => {
+        console.log('❌ 反主错误:', error);
+        setGameMessage(`❌ 反主失败: ${error}`);
+      }, 'PokerTable');
+
       socketService.on('playError', (error) => {
         console.log('❌ 出牌错误:', error);
         setGameMessage(`❌ 出牌失败: ${error}`);
@@ -192,7 +256,23 @@ const PokerTable = () => {
       
       // 实时验证选择的牌
       if (newSelection.length > 0) {
-        if (gameState?.gamePhase === 'bidding') {
+        // 检查是否在反主阶段
+        if (gameState?.trumpPlayer !== null && gameState?.trumpPlayer !== undefined && 
+            (gameState?.counterTrumpEndTime && Date.now() <= gameState.counterTrumpEndTime) &&
+            (gameState?.counterTrumpPlayer === null || gameState?.counterTrumpPlayer === undefined)) {
+          // 反主阶段
+          const validation = validateCounterTrumpCards(newSelection);
+          if (newSelection.length === 4) {
+            setGameMessage(validation.valid 
+              ? `✅ ${validation.message}` 
+              : `❌ ${validation.message}`
+            );
+          } else if (newSelection.length > 4) {
+            setGameMessage('❌ 反主最多只能选择4张牌');
+          } else {
+            setGameMessage(`🔄 已选择${newSelection.length}张牌，反主需要一对王+一对牌(共4张)`);
+          }
+        } else if (gameState?.gamePhase === 'bidding' || gameState?.gamePhase === 'dealing' || trumpCountdown !== null) {
           // 亮主阶段
           const validation = validateTrumpCards(newSelection);
           if (newSelection.length === 3) {
@@ -221,6 +301,11 @@ const PokerTable = () => {
 
   // 验证亮主牌型(一王带一对)
   const validateTrumpCards = (selectedCards) => {
+    // 检查是否已经有人亮主
+    if (gameState?.trumpPlayer !== null && gameState?.trumpPlayer !== undefined) {
+      return { valid: false, message: '已经有人亮主了' };
+    }
+    
     if (selectedCards.length !== 3) {
       return { valid: false, message: '亮主需要选择3张牌(一王带一对)' };
     }
@@ -255,8 +340,99 @@ const PokerTable = () => {
     };
   };
 
+  // 验证反主牌型(一对王+一对牌)
+  const validateCounterTrumpCards = (selectedCards) => {
+    // 检查是否在反主时间窗口内
+    if (!gameState?.counterTrumpEndTime || Date.now() > gameState.counterTrumpEndTime) {
+      return { valid: false, message: '反主时间已过' };
+    }
+    
+    // 检查是否已经有人反主
+    if (gameState?.counterTrumpPlayer !== null && gameState?.counterTrumpPlayer !== undefined) {
+      return { valid: false, message: '已经有人反主了' };
+    }
+    
+    if (selectedCards.length !== 4) {
+      return { valid: false, message: '反主需要选择4张牌（一对王+一对牌）' };
+    }
+
+    const selectedCardObjects = selectedCards.map(index => myCards[index]);
+    
+    // 检查是否有王牌和普通牌
+    const jokers = selectedCardObjects.filter(card => card.suit === 'joker');
+    const normalCards = selectedCardObjects.filter(card => card.suit !== 'joker');
+
+    if (jokers.length !== 2) {
+      return { valid: false, message: '反主必须包含一对王牌' };
+    }
+
+    if (normalCards.length !== 2) {
+      return { valid: false, message: '反主必须包含一对普通牌' };
+    }
+
+    // 检查王牌是否是一对（相同等级的王）
+    const [joker1, joker2] = jokers;
+    if (joker1.rank !== joker2.rank) {
+      return { valid: false, message: '王牌必须是一对相同的王' };
+    }
+
+    // 检查普通牌是否是一对（相同点数）
+    const [normal1, normal2] = normalCards;
+    if (normal1.rank !== normal2.rank) {
+      return { valid: false, message: '普通牌必须是一对（相同点数）' };
+    }
+
+    return { 
+      valid: true, 
+      message: `可以反主: 一对${joker1.rank === 'big' ? '大王' : '小王'} + 一对${normal1.rank}`,
+      counterTrumpRank: joker1.rank,
+      counterTrumpPair: normal1.rank
+    };
+  };
+
+  // 反主操作
+  const handleCounterTrump = () => {
+    console.log('🔄 前端反主请求:', {
+      selectedCards,
+      myCards: myCards.length,
+      gameState: gameState?.gamePhase,
+      myPosition,
+      roomId
+    });
+    
+    const validation = validateCounterTrumpCards(selectedCards);
+    
+    if (!validation.valid) {
+      setGameMessage(`❌ ${validation.message}`);
+      return;
+    }
+
+    // 显示反主预览
+    setGameMessage(`🔄 准备反主: ${validation.message}`);
+
+    const selectedCardObjects = selectedCards.map(index => myCards[index]);
+    console.log('🔄 发送反主请求:', {
+      roomId: roomId,
+      cards: selectedCardObjects
+    });
+    
+    socketService.emit('counterTrump', {
+      roomId: roomId,
+      cards: selectedCardObjects
+    });
+    setSelectedCards([]);
+  };
+
   // 亮主操作
   const handleDeclareTrump = () => {
+    console.log('🎺 前端亮主请求:', {
+      selectedCards,
+      myCards: myCards.length,
+      gameState: gameState?.gamePhase,
+      myPosition,
+      roomId
+    });
+    
     const validation = validateTrumpCards(selectedCards);
     
     if (!validation.valid) {
@@ -268,6 +444,11 @@ const PokerTable = () => {
     setGameMessage(`🎺 准备亮主: ${validation.message}`);
 
     const selectedCardObjects = selectedCards.map(index => myCards[index]);
+    console.log('🎺 发送亮主请求:', {
+      roomId: roomId,
+      cards: selectedCardObjects
+    });
+    
     socketService.emit('declareTrump', {
       roomId: roomId,
       cards: selectedCardObjects
@@ -375,6 +556,22 @@ const PokerTable = () => {
               <span className="trump-info">
                 当前主色: {gameState?.trumpSuit || 'null'}
               </span>
+              {gameState?.trumpPlayer !== null && gameState?.trumpPlayer !== undefined && (
+                <span className="trump-player-info">
+                  🎺 亮主玩家: {room?.players?.[gameState.trumpPlayer]?.name || `玩家${gameState.trumpPlayer + 1}`}
+                  {gameState.trumpRank && ` (${gameState.trumpRank})`}
+                </span>
+              )}
+              {trumpCountdown !== null && (
+                <span className="countdown-info">
+                  ⏰ 亮主倒计时: {trumpCountdown}秒
+                </span>
+              )}
+              {counterTrumpCountdown !== null && (
+                <span className="countdown-info">
+                  🔄 反主倒计时: {counterTrumpCountdown}秒
+                </span>
+              )}
               {gameState?.currentTurn !== undefined && (
                 <span className="turn-info">
                   当前回合: 玩家{gameState.currentTurn + 1}
@@ -461,6 +658,7 @@ const PokerTable = () => {
                   onCardClick={() => {}} // 其他玩家的牌不可点击
                   isMyTurn={false}
                   position={position}
+                  canSelect={false} // 其他玩家不能选牌
                 />
               </div>
             );
@@ -472,9 +670,19 @@ const PokerTable = () => {
               {selectedCards.length > 0 && (
                 <div className="action-buttons">
                   <span className="selected-count">已选择 {selectedCards.length} 张</span>
-                  {gameState?.gamePhase === 'bidding' && (
+                  {/* 亮主按钮 */}
+                  {(gameState?.gamePhase === 'bidding' || gameState?.gamePhase === 'dealing' || trumpCountdown !== null) && 
+                   (gameState?.trumpPlayer === null || gameState?.trumpPlayer === undefined) && (
                     <button 
-                      onClick={handleDeclareTrump} 
+                      onClick={() => {
+                        console.log('🎺 亮主按钮点击:', {
+                          gamePhase: gameState?.gamePhase,
+                          trumpCountdown,
+                          selectedCards: selectedCards.length,
+                          myPosition
+                        });
+                        handleDeclareTrump();
+                      }}
                       className={`action-btn trump-btn ${
                         validateTrumpCards(selectedCards).valid ? 'valid' : 'invalid'
                       }`}
@@ -483,6 +691,32 @@ const PokerTable = () => {
                       {selectedCards.length === 3 
                         ? (validateTrumpCards(selectedCards).valid ? '✅ 亮主' : '❌ 无效牌型')
                         : '亮主 (一王带一对)'
+                      }
+                    </button>
+                  )}
+                  
+                  {/* 反主按钮 */}
+                  {gameState?.trumpPlayer !== null && gameState?.trumpPlayer !== undefined && 
+                   (gameState?.counterTrumpEndTime && Date.now() <= gameState.counterTrumpEndTime) &&
+                   (gameState?.counterTrumpPlayer === null || gameState?.counterTrumpPlayer === undefined) && (
+                    <button 
+                      onClick={() => {
+                        console.log('🔄 反主按钮点击:', {
+                          gamePhase: gameState?.gamePhase,
+                          counterTrumpEndTime: gameState?.counterTrumpEndTime,
+                          selectedCards: selectedCards.length,
+                          myPosition
+                        });
+                        handleCounterTrump();
+                      }}
+                      className={`action-btn counter-trump-btn ${
+                        validateCounterTrumpCards(selectedCards).valid ? 'valid' : 'invalid'
+                      }`}
+                      disabled={!validateCounterTrumpCards(selectedCards).valid}
+                    >
+                      {selectedCards.length === 4 
+                        ? (validateCounterTrumpCards(selectedCards).valid ? '✅ 反主' : '❌ 无效牌型')
+                        : '反主 (一对王+一对牌)'
                       }
                     </button>
                   )}
@@ -516,6 +750,15 @@ const PokerTable = () => {
               onCardClick={toggleCardSelection}
               isMyTurn={gameState?.currentTurn === myPosition}
               position="bottom"
+              canSelect={
+                // 亮主阶段
+                ((gameState?.gamePhase === 'bidding' || gameState?.gamePhase === 'dealing' || trumpCountdown !== null) && 
+                 (gameState?.trumpPlayer === null || gameState?.trumpPlayer === undefined)) ||
+                // 反主阶段
+                (gameState?.trumpPlayer !== null && gameState?.trumpPlayer !== undefined && 
+                 (gameState?.counterTrumpEndTime && Date.now() <= gameState.counterTrumpEndTime) &&
+                 (gameState?.counterTrumpPlayer === null || gameState?.counterTrumpPlayer === undefined))
+              }
             />
           </div>
 

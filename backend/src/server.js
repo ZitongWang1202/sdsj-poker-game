@@ -41,6 +41,11 @@ function startDealingAnimation(io, roomId, gameManager) {
   console.log(`🎴 房间 ${roomId} 游戏实例存在，开始逐张发牌`);
   console.log(`👥 房间内玩家数量: ${room.players.length}`);
   
+  // 发送发牌开始事件，让前端知道可以开始亮主
+  io.to(roomId).emit('dealingStarted', {
+    gameState: room.game.getGameState()
+  });
+  
   // 创建发牌序列：真正一张一张发牌
   const totalCardsPerPlayer = 26; // 每人26张牌
   const totalCards = totalCardsPerPlayer * room.players.length; // 总共104张牌
@@ -66,6 +71,22 @@ function startDealingAnimation(io, roomId, gameManager) {
           playerSocket.emit('cardsDealt', dealData);
         }
       });
+      
+      // 启动10秒亮主倒计时
+      room.trumpCountdownTimer = setTimeout(() => {
+        if (room.game.gamePhase === 'dealing') {
+          // 如果10秒内没有人亮主，自动进入出牌阶段
+          room.game.gamePhase = 'bidding';
+          console.log('⏰ 亮主时间结束，进入出牌阶段');
+          
+          // 通知所有玩家
+          io.to(roomId).emit('trumpTimeEnded', {
+            gameState: room.game.getGameState()
+          });
+        }
+        // 清除倒计时引用
+        room.trumpCountdownTimer = null;
+      }, 10000);
       
       return;
     }
@@ -131,6 +152,29 @@ io.on('connection', (socket) => {
       socket.to(roomId).emit('playerJoined', result.room);
       console.log(`玩家 ${playerName} 加入房间 ${roomId}`);
       
+      // 如果游戏已经开始或存在进行中的游戏，向新加入的玩家发送手牌/状态快照，避免错过发牌事件
+      try {
+        const room = gameManager.getRoom(roomId);
+        if (room && room.game) {
+          const playerIndex = room.players.findIndex(p => p.socketId === socket.id);
+          if (playerIndex !== -1) {
+            const playerSocket = io.sockets.sockets.get(socket.id);
+            if (playerSocket) {
+              const snapshot = {
+                cards: room.players[playerIndex].cards,
+                playerPosition: playerIndex,
+                gameState: room.game.getGameState(),
+                dealingComplete: true
+              };
+              console.log(`📤 向新加入玩家发送手牌快照: ${playerName}, 牌数=${snapshot.cards?.length}`);
+              playerSocket.emit('cardsDealt', snapshot);
+            }
+          }
+        }
+      } catch (e) {
+        console.warn('发送加入快照失败:', e);
+      }
+
       // 如果房间人满，开始游戏
       if (result.room.players.length === 4) {
         gameManager.startGame(roomId);
@@ -170,21 +214,38 @@ io.on('connection', (socket) => {
   // 亮主
   socket.on('declareTrump', (data) => {
     const { roomId, cards } = data;
+    console.log(`🎺 收到亮主请求 - Socket ID: ${socket.id}, 房间: ${roomId}, 牌数: ${cards.length}`);
+    
     const playerInfo = gameManager.getPlayerInfo(socket.id);
+    console.log(`🎺 玩家信息:`, playerInfo);
     
     if (!playerInfo) {
+      console.log(`❌ 玩家信息不存在 - Socket ID: ${socket.id}`);
       socket.emit('trumpError', '玩家信息不存在');
       return;
     }
     
     const room = gameManager.getRoom(roomId);
     if (!room || !room.game) {
+      console.log(`❌ 房间或游戏不存在 - 房间: ${roomId}`);
       socket.emit('trumpError', '房间或游戏不存在');
       return;
     }
     
+    console.log(`🎺 游戏状态:`, room.game.getGameState());
+    console.log(`🎺 玩家位置: ${playerInfo.player.position}, 玩家名称: ${playerInfo.player.name}`);
+    
     const result = room.game.declareTrump(playerInfo.player.position, cards);
+    console.log(`🎺 亮主结果:`, result);
+    
     if (result.success) {
+      // 清除亮主倒计时
+      if (room.trumpCountdownTimer) {
+        clearTimeout(room.trumpCountdownTimer);
+        room.trumpCountdownTimer = null;
+        console.log('⏰ 有人亮主成功，清除倒计时');
+      }
+      
       // 通知所有玩家亮主成功
       io.to(roomId).emit('trumpDeclared', {
         playerName: playerInfo.player.name,
@@ -193,9 +254,54 @@ io.on('connection', (socket) => {
         trumpRank: result.trumpRank,
         gameState: room.game.getGameState()
       });
-      console.log(`玩家 ${playerInfo.player.name} 亮主成功: ${result.trumpSuit}`);
+      console.log(`✅ 玩家 ${playerInfo.player.name} 亮主成功: ${result.trumpSuit}`);
     } else {
+      console.log(`❌ 玩家 ${playerInfo.player.name} 亮主失败: ${result.message}`);
       socket.emit('trumpError', result.message);
+    }
+  });
+
+  // 反主
+  socket.on('counterTrump', (data) => {
+    const { roomId, cards } = data;
+    console.log(`🔄 收到反主请求 - Socket ID: ${socket.id}, 房间: ${roomId}, 牌数: ${cards.length}`);
+    
+    const playerInfo = gameManager.getPlayerInfo(socket.id);
+    console.log(`🔄 玩家信息:`, playerInfo);
+    
+    if (!playerInfo) {
+      console.log(`❌ 玩家信息不存在 - Socket ID: ${socket.id}`);
+      socket.emit('counterTrumpError', '玩家信息不存在');
+      return;
+    }
+    
+    const room = gameManager.getRoom(roomId);
+    if (!room || !room.game) {
+      console.log(`❌ 房间或游戏不存在 - 房间: ${roomId}`);
+      socket.emit('counterTrumpError', '房间或游戏不存在');
+      return;
+    }
+    
+    console.log(`🔄 游戏状态:`, room.game.getGameState());
+    console.log(`🔄 玩家位置: ${playerInfo.player.position}, 玩家名称: ${playerInfo.player.name}`);
+    
+    const result = room.game.counterTrump(playerInfo.player.position, cards);
+    console.log(`🔄 反主结果:`, result);
+    
+    if (result.success) {
+      // 通知所有玩家反主成功
+      io.to(roomId).emit('counterTrumpDeclared', {
+        playerName: playerInfo.player.name,
+        playerId: playerInfo.player.position,
+        counterTrumpRank: result.counterTrumpRank,
+        counterTrumpPair: result.counterTrumpPair,
+        newDealer: result.newDealer,
+        gameState: room.game.getGameState()
+      });
+      console.log(`✅ 玩家 ${playerInfo.player.name} 反主成功: 一对${result.counterTrumpRank === 'big' ? '大王' : '小王'} + 一对${result.counterTrumpPair}`);
+    } else {
+      console.log(`❌ 玩家 ${playerInfo.player.name} 反主失败: ${result.message}`);
+      socket.emit('counterTrumpError', result.message);
     }
   });
 

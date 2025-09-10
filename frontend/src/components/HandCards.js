@@ -10,17 +10,20 @@ import './HandCards.css';
  * @param {Function} props.onCardClick - 卡牌点击回调
  * @param {boolean} props.isMyTurn - 是否是我的回合
  * @param {string} props.position - 手牌位置 ('bottom', 'top', 'left', 'right')
+ * @param {boolean} props.canSelect - 是否可以选牌（用于亮主阶段）
  */
 const HandCards = ({ 
   cards = [], 
   selectedCards = [], 
   onCardClick = () => {}, 
   isMyTurn = false,
-  position = 'bottom'
+  position = 'bottom',
+  canSelect = false
 }) => {
   
   const handleCardClick = (cardIndex) => {
-    if (isMyTurn && onCardClick) {
+    // 在亮主阶段，所有玩家都可以选牌；在出牌阶段，只有当前回合玩家可以选牌
+    if ((canSelect || isMyTurn) && onCardClick) {
       onCardClick(cardIndex);
     }
   };
@@ -40,7 +43,7 @@ const HandCards = ({
       position: 'absolute',
       zIndex: index,
       transition: 'all 0.3s ease',
-      cursor: isMyTurn ? 'pointer' : 'default'
+      cursor: (canSelect || isMyTurn) ? 'pointer' : 'default'
     };
 
     // 根据位置设置样式

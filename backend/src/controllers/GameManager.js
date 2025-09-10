@@ -44,13 +44,13 @@ class GameManager {
   }
 
   // 开始游戏
-  startGame(roomId) {
+  startGame(roomId, debugMode = false, presetCards = null) {
     const room = this.rooms.get(roomId);
     if (!room || room.players.length !== 4) {
       return false;
     }
 
-    const game = new ShandongUpgradeGame(room.players);
+    const game = new ShandongUpgradeGame(room.players, debugMode, presetCards);
     room.startGame(game);
     
     return true;
