@@ -5,7 +5,7 @@ import './GameInterface.css';
 
 const GameInterface = ({ room }) => {
   const [myCards, setMyCards] = useState([]);
-  const [selectedCards, setSelectedCards] = useState([]);
+  const [selectedCardIds, setSelectedCardIds] = useState([]);
   const [gameState, setGameState] = useState(null);
   const [myPosition, setMyPosition] = useState(-1);
   const [gameMessage, setGameMessage] = useState('');
@@ -16,10 +16,12 @@ const GameInterface = ({ room }) => {
     // 监听发牌事件
     socket.on('cardsDealt', (data) => {
       const { cards, playerPosition, gameState } = data;
-      setMyCards(sortCards(cards));
+      const sorted = sortCards(cards);
+      setMyCards(sorted);
       setMyPosition(playerPosition);
       setGameState(gameState);
       setGameMessage('📋 发牌完成！查看你的手牌，准备亮主');
+      setSelectedCardIds(prev => prev.filter(id => sorted.some(c => c.id === id)));
     });
 
     // 监听亮主事件
@@ -40,8 +42,10 @@ const GameInterface = ({ room }) => {
 
     // 监听手牌更新
     socket.on('handUpdated', (data) => {
-      setMyCards(sortCards(data.cards));
+      const sorted = sortCards(data.cards);
+      setMyCards(sorted);
       setGameState(data.gameState);
+      setSelectedCardIds(prev => prev.filter(id => sorted.some(c => c.id === id)));
     });
 
     // 监听错误
@@ -64,43 +68,42 @@ const GameInterface = ({ room }) => {
   }, [myCards, gameState]);
 
   // 选择/取消选择卡牌
-  const toggleCardSelection = (cardIndex) => {
-    setSelectedCards(prev => {
-      if (prev.includes(cardIndex)) {
-        return prev.filter(i => i !== cardIndex);
-      } else {
-        return [...prev, cardIndex];
-      }
-    });
+  const toggleCardSelection = (cardId) => {
+    setSelectedCardIds(prev => prev.includes(cardId) ? prev.filter(id => id !== cardId) : [...prev, cardId]);
   };
 
   // 亮主操作
   const handleDeclareTrump = () => {
-    if (selectedCards.length === 0) {
+    if (selectedCardIds.length === 0) {
       setGameMessage('❌ 请选择要亮的牌');
       return;
     }
-
-    const selectedCardObjects = selectedCards.map(index => myCards[index]);
+    const idSet = new Set(selectedCardIds);
+    const selectedCardObjects = myCards.filter(c => idSet.has(c.id));
     socketService.emit('declareTrump', {
       roomId: room.id,
       cards: selectedCardObjects
     });
-    setSelectedCards([]);
+    setSelectedCardIds([]);
   };
 
   // 出牌操作
   const handlePlayCards = () => {
-    if (selectedCards.length === 0) {
+    if (selectedCardIds.length === 0) {
       setGameMessage('❌ 请选择要出的牌');
       return;
     }
+    const idSet = new Set(selectedCardIds);
+    const cardIndices = myCards
+      .map((c, idx) => ({ id: c.id, idx }))
+      .filter(x => idSet.has(x.id))
+      .map(x => x.idx);
 
     socketService.emit('playCards', {
       roomId: room.id,
-      cardIndices: selectedCards
+      cardIndices
     });
-    setSelectedCards([]);
+    setSelectedCardIds([]);
   };
 
   // 获取游戏阶段描述
@@ -144,10 +147,10 @@ const GameInterface = ({ room }) => {
           <div className="hand-header">
             <h4>我的手牌 ({myCards.length}张)</h4>
             <div className="hand-actions">
-              {selectedCards.length > 0 && (
+              {selectedCardIds.length > 0 && (
                 <>
                   <span className="selected-count">
-                    已选择 {selectedCards.length} 张牌
+                    已选择 {selectedCardIds.length} 张牌
                   </span>
                   {gameState?.gamePhase === 'bidding' && (
                     <button 
@@ -166,7 +169,7 @@ const GameInterface = ({ room }) => {
                     </button>
                   )}
                   <button 
-                    onClick={() => setSelectedCards([])}
+                    onClick={() => setSelectedCardIds([])}
                     className="btn btn-secondary btn-small"
                   >
                     取消选择
@@ -180,8 +183,8 @@ const GameInterface = ({ room }) => {
             {myCards.map((card, index) => (
               <div
                 key={card.id}
-                className={`game-card ${selectedCards.includes(index) ? 'selected' : ''}`}
-                onClick={() => toggleCardSelection(index)}
+                className={`game-card ${selectedCardIds.includes(card.id) ? 'selected' : ''}`}
+                onClick={() => toggleCardSelection(card.id)}
               >
                 <div className="card-content">
                   {getCardDisplayName(card)}

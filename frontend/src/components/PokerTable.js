@@ -10,7 +10,7 @@ const PokerTable = () => {
   const { roomId } = useParams();
   const navigate = useNavigate();
   const [myCards, setMyCards] = useState([]);
-  const [selectedCards, setSelectedCards] = useState([]);
+  const [selectedCardIds, setSelectedCardIds] = useState([]);
   const [gameState, setGameState] = useState(null);
   const [myPosition, setMyPosition] = useState(-1);
   const [gameMessage, setGameMessage] = useState('');
@@ -18,6 +18,21 @@ const PokerTable = () => {
   const [room, setRoom] = useState(null); // 房间信息
   const [trumpCountdown, setTrumpCountdown] = useState(null);
   const [counterTrumpCountdown, setCounterTrumpCountdown] = useState(null);
+  const [stickCountdown, setStickCountdown] = useState(null);
+  const [stickOptions, setStickOptions] = useState([]); // 可粘主的牌型选项
+  const [stickExchange, setStickExchange] = useState(null); // 粘主交换界面
+  const [selectedExchangeCards, setSelectedExchangeCards] = useState([]); // 选中的交换牌
+
+  // 监听游戏状态变化，重新计算粘主选项
+  useEffect(() => {
+    console.log('🔄 useEffect触发 - 游戏阶段:', gameState?.gamePhase, '手牌长度:', myCards.length, '我的位置:', myPosition);
+    if (gameState?.gamePhase === 'sticking' && myCards.length > 0 && myPosition !== -1) {
+      console.log('🔄 游戏状态变化，重新计算粘主选项');
+      const options = calculateStickOptions(myCards, gameState);
+      setStickOptions(options);
+    }
+  }, [gameState?.gamePhase, myCards, myPosition]);
+
 
   useEffect(() => {
     console.log('🎮 PokerTable组件挂载 - roomId:', roomId);
@@ -97,8 +112,10 @@ const PokerTable = () => {
         
         // 逐张添加到手牌
         setMyCards(prev => {
-          const newCards = [...prev, card];
-          return sortCards(newCards);
+          const newCards = sortCards([...prev, card]);
+          // 维持基于ID的选择
+          setSelectedCardIds(sel => sel.filter(id => newCards.some(c => c.id === id)));
+          return newCards;
         });
         
         // 更新发牌进度消息
@@ -116,10 +133,12 @@ const PokerTable = () => {
         
         if (dealingComplete) {
           // 确保手牌完整（防止网络丢包）
-          setMyCards(sortCards(cards));
+          const sorted = sortCards(cards);
+          setMyCards(sorted);
           setMyPosition(playerPosition);
           setGameState(gameState);
           setGameMessage('📋 发牌完成！');
+          setSelectedCardIds(prev => prev.filter(id => sorted.some(c => c.id === id)));
           
           // 启动10秒亮主倒计时
           setTrumpCountdown(10);
@@ -133,6 +152,49 @@ const PokerTable = () => {
               return prev - 1;
             });
           }, 1000);
+        }
+      }, 'PokerTable');
+
+      // 监听发牌完成/叫主开始事件
+      socketService.on('biddingStarted', (data) => {
+        console.log('🎺 发牌完成，叫主阶段开始:', data);
+        setGameState(data.gameState);
+        setGameMessage('📋 发牌结束！可以开始亮主');
+        
+        // 如果已经有人亮主，启动反主倒计时
+        if (data.gameState.trumpSuit && data.gameState.counterTrumpEndTime) {
+          const now = Date.now();
+          const timeLeft = Math.max(0, Math.ceil((data.gameState.counterTrumpEndTime - now) / 1000));
+          if (timeLeft > 0) {
+            setCounterTrumpCountdown(timeLeft);
+            const countdownInterval = setInterval(() => {
+              setCounterTrumpCountdown(prev => {
+                if (prev <= 1) {
+                  clearInterval(countdownInterval);
+                  setGameMessage('⏰ 反主时间结束，游戏继续');
+                  return null;
+                }
+                return prev - 1;
+              });
+            }, 1000);
+          }
+        } else if (!data.gameState.trumpSuit && data.declareEndTime) {
+          // 如果没有人亮主，启动亮主倒计时
+          const now = Date.now();
+          const timeLeft = Math.max(0, Math.ceil((data.declareEndTime - now) / 1000));
+          if (timeLeft > 0) {
+            setTrumpCountdown(timeLeft);
+            const countdownInterval = setInterval(() => {
+              setTrumpCountdown(prev => {
+                if (prev <= 1) {
+                  clearInterval(countdownInterval);
+                  setGameMessage('⏰ 亮主时间结束，游戏继续');
+                  return null;
+                }
+                return prev - 1;
+              });
+            }, 1000);
+          }
         }
       }, 'PokerTable');
 
@@ -163,7 +225,11 @@ const PokerTable = () => {
         
         // 重新排序手牌（根据主牌）
         if (myCards.length > 0) {
-          setMyCards(sortCards(myCards, gameState?.currentLevel, data.trumpSuit));
+          setMyCards(prev => {
+            const sorted = sortCards(prev, gameState?.currentLevel, data.trumpSuit);
+            setSelectedCardIds(sel => sel.filter(id => sorted.some(c => c.id === id)));
+            return sorted;
+          });
         }
       }, 'PokerTable');
 
@@ -191,8 +257,20 @@ const PokerTable = () => {
 
       socketService.on('handUpdated', (data) => {
         console.log('✋ 手牌更新:', data);
-        setMyCards(sortCards(data.cards));
+        const sorted = sortCards(data.cards);
+        setMyCards(sorted);
         setGameState(data.gameState);
+        setSelectedCardIds(prev => prev.filter(id => sorted.some(c => c.id === id)));
+        
+        // 如果在粘主阶段，重新计算粘主选项
+        if (data.gameState?.gamePhase === 'sticking') {
+          setTimeout(() => {
+            console.log('🔄 手牌更新，重新计算粘主选项');
+            console.log('🔄 当前myPosition:', myPosition, '手牌长度:', sorted.length);
+            const options = calculateStickOptions(sorted, data.gameState);
+            setStickOptions(options);
+          }, 200);
+        }
       }, 'PokerTable');
 
       socketService.on('trumpError', (error) => {
@@ -218,6 +296,84 @@ const PokerTable = () => {
       socketService.on('counterTrumpError', (error) => {
         console.log('❌ 反主错误:', error);
         setGameMessage(`❌ 反主失败: ${error}`);
+      }, 'PokerTable');
+
+      // 监听粘主阶段开始
+      socketService.on('stickingStarted', (data) => {
+        console.log('📌 粘主阶段开始:', data);
+        setGameMessage('📌 粘主阶段开始，有王连对的玩家可以粘主');
+        setGameState(data.gameState);
+        setStickCountdown(10);
+        setStickOptions([]);
+        setStickExchange(null);
+        setSelectedExchangeCards([]);
+        
+        // 延迟计算可粘主的牌型选项，确保状态已更新
+        setTimeout(() => {
+          console.log('🔍 延迟计算粘主选项，当前手牌长度:', myCards.length);
+          console.log('🔍 当前手牌:', myCards);
+          console.log('🔍 游戏状态:', data.gameState);
+          console.log('🔍 我的位置:', myPosition);
+          
+          // 如果手牌为空或位置未设置，跳过计算
+          if (myCards.length === 0 || myPosition === -1) {
+            console.log('❌ 手牌为空或位置未设置，跳过粘主选项计算');
+            return;
+          }
+          
+          const options = calculateStickOptions(myCards, data.gameState);
+          console.log('🔍 计算出的粘主选项:', options);
+          setStickOptions(options);
+        }, 500);
+        
+        // 启动粘主倒计时
+        const countdownInterval = setInterval(() => {
+          setStickCountdown(prev => {
+            if (prev <= 1) {
+              clearInterval(countdownInterval);
+              setGameMessage('⏰ 粘主时间结束，进入出牌阶段');
+              return null;
+            }
+            return prev - 1;
+          });
+        }, 1000);
+      }, 'PokerTable');
+
+      // 监听粘主成功
+      socketService.on('trumpSticked', (data) => {
+        console.log('📌 粘主成功:', data);
+        setGameMessage(`📌 ${data.playerName} 粘主成功！`);
+        setGameState(data.gameState);
+        setStickCountdown(null);
+        setStickOptions([]);
+        setStickExchange(null);
+        setSelectedExchangeCards([]);
+        setSelectedCardIds([]); // 清空选中的牌
+      }, 'PokerTable');
+
+      socketService.on('stickTrumpError', (error) => {
+        console.log('❌ 粘主错误:', error);
+        setGameMessage(`❌ 粘主失败: ${error}`);
+      }, 'PokerTable');
+
+      // 监听粘主倒计时停止
+      socketService.on('stickingCountdownStopped', (data) => {
+        console.log('📌 粘主倒计时停止:', data);
+        setGameMessage(data.message);
+        // 不更新游戏状态，保持当前的粘主交换界面
+      }, 'PokerTable');
+
+      // 监听游戏阶段变化
+      socketService.on('gamePhaseChanged', (data) => {
+        console.log('🔄 游戏阶段变化:', data);
+        setGameState(data.gameState);
+        if (data.phase === 'playing') {
+          setStickCountdown(null);
+          setStickOptions([]);
+          setStickExchange(null);
+          setSelectedExchangeCards([]);
+          setSelectedCardIds([]);
+        }
       }, 'PokerTable');
 
       socketService.on('playError', (error) => {
@@ -248,11 +404,21 @@ const PokerTable = () => {
   }, [roomId]);
 
   // 选择/取消选择卡牌
-  const toggleCardSelection = (cardIndex) => {
-    setSelectedCards(prev => {
-      const newSelection = prev.includes(cardIndex) 
-        ? prev.filter(i => i !== cardIndex)
-        : [...prev, cardIndex];
+  const toggleCardSelection = (cardId) => {
+    // 如果在粘主交换模式
+    if (stickExchange) {
+      if (selectedExchangeCards.includes(cardId)) {
+        setSelectedExchangeCards(prev => prev.filter(id => id !== cardId));
+      } else if (selectedExchangeCards.length < 3) {
+        setSelectedExchangeCards(prev => [...prev, cardId]);
+      }
+      return;
+    }
+    
+    setSelectedCardIds(prev => {
+      const newSelection = prev.includes(cardId) 
+        ? prev.filter(i => i !== cardId)
+        : [...prev, cardId];
       
       // 实时验证选择的牌
       if (newSelection.length > 0) {
@@ -300,17 +466,18 @@ const PokerTable = () => {
   };
 
   // 验证亮主牌型(一王带一对)
-  const validateTrumpCards = (selectedCards) => {
+  const validateTrumpCards = (selectedIds) => {
     // 检查是否已经有人亮主
     if (gameState?.trumpPlayer !== null && gameState?.trumpPlayer !== undefined) {
       return { valid: false, message: '已经有人亮主了' };
     }
     
-    if (selectedCards.length !== 3) {
+    if (selectedIds.length !== 3) {
       return { valid: false, message: '亮主需要选择3张牌(一王带一对)' };
     }
 
-    const selectedCardObjects = selectedCards.map(index => myCards[index]);
+    const idSet = new Set(selectedIds);
+    const selectedCardObjects = myCards.filter(c => idSet.has(c.id));
     
     // 分类：王牌和普通牌
     const jokers = selectedCardObjects.filter(card => card.suit === 'joker');
@@ -341,26 +508,26 @@ const PokerTable = () => {
   };
 
   // 验证反主牌型(一对王+一对牌)
-  const validateCounterTrumpCards = (selectedCards) => {
-    // 检查是否在反主时间窗口内
-    if (!gameState?.counterTrumpEndTime || Date.now() > gameState.counterTrumpEndTime) {
+  const validateCounterTrumpCards = (selectedIds) => {
+    // 检查是否在反主时间窗口内：若没有下发截止时间（发牌中亮主的过渡期），允许；若有并已过期，则禁止
+    if (gameState?.counterTrumpEndTime && Date.now() > gameState.counterTrumpEndTime) {
       return { valid: false, message: '反主时间已过' };
     }
-    
     // 检查是否已经有人反主
     if (gameState?.counterTrumpPlayer !== null && gameState?.counterTrumpPlayer !== undefined) {
       return { valid: false, message: '已经有人反主了' };
     }
     
-    if (selectedCards.length !== 4) {
+    if (selectedIds.length !== 4) {
       return { valid: false, message: '反主需要选择4张牌（一对王+一对牌）' };
     }
 
-    const selectedCardObjects = selectedCards.map(index => myCards[index]);
+    const idSet = new Set(selectedIds);
+    const selectedCardObjects = myCards.filter(c => idSet.has(c.id));
     
     // 检查是否有王牌和普通牌
-    const jokers = selectedCardObjects.filter(card => card.suit === 'joker');
-    const normalCards = selectedCardObjects.filter(card => card.suit !== 'joker');
+    const jokers = selectedCardObjects.filter(card => card && card.suit === 'joker');
+    const normalCards = selectedCardObjects.filter(card => card && card.suit !== 'joker');
 
     if (jokers.length !== 2) {
       return { valid: false, message: '反主必须包含一对王牌' };
@@ -393,14 +560,14 @@ const PokerTable = () => {
   // 反主操作
   const handleCounterTrump = () => {
     console.log('🔄 前端反主请求:', {
-      selectedCards,
+      selectedCardIds,
       myCards: myCards.length,
       gameState: gameState?.gamePhase,
       myPosition,
       roomId
     });
     
-    const validation = validateCounterTrumpCards(selectedCards);
+    const validation = validateCounterTrumpCards(selectedCardIds);
     
     if (!validation.valid) {
       setGameMessage(`❌ ${validation.message}`);
@@ -410,7 +577,8 @@ const PokerTable = () => {
     // 显示反主预览
     setGameMessage(`🔄 准备反主: ${validation.message}`);
 
-    const selectedCardObjects = selectedCards.map(index => myCards[index]);
+    const idSet = new Set(selectedCardIds);
+    const selectedCardObjects = myCards.filter(c => idSet.has(c.id));
     console.log('🔄 发送反主请求:', {
       roomId: roomId,
       cards: selectedCardObjects
@@ -420,20 +588,20 @@ const PokerTable = () => {
       roomId: roomId,
       cards: selectedCardObjects
     });
-    setSelectedCards([]);
+    setSelectedCardIds([]);
   };
 
   // 亮主操作
   const handleDeclareTrump = () => {
     console.log('🎺 前端亮主请求:', {
-      selectedCards,
+      selectedCardIds,
       myCards: myCards.length,
       gameState: gameState?.gamePhase,
       myPosition,
       roomId
     });
     
-    const validation = validateTrumpCards(selectedCards);
+    const validation = validateTrumpCards(selectedCardIds);
     
     if (!validation.valid) {
       setGameMessage(`❌ ${validation.message}`);
@@ -443,7 +611,8 @@ const PokerTable = () => {
     // 显示亮主预览
     setGameMessage(`🎺 准备亮主: ${validation.message}`);
 
-    const selectedCardObjects = selectedCards.map(index => myCards[index]);
+    const idSet = new Set(selectedCardIds);
+    const selectedCardObjects = myCards.filter(c => idSet.has(c.id));
     console.log('🎺 发送亮主请求:', {
       roomId: roomId,
       cards: selectedCardObjects
@@ -453,16 +622,17 @@ const PokerTable = () => {
       roomId: roomId,
       cards: selectedCardObjects
     });
-    setSelectedCards([]);
+    setSelectedCardIds([]);
   };
 
   // 验证并识别出牌牌型
-  const validatePlayCards = (selectedCards) => {
-    if (selectedCards.length === 0) {
+  const validatePlayCards = (selectedIds) => {
+    if (selectedIds.length === 0) {
       return { valid: false, message: '请选择要出的牌' };
     }
 
-    const selectedCardObjects = selectedCards.map(index => myCards[index]);
+    const idSet = new Set(selectedIds);
+    const selectedCardObjects = myCards.filter(c => idSet.has(c.id));
     const cardType = identifyCardType(
       selectedCardObjects, 
       gameState?.currentLevel || 2, 
@@ -478,7 +648,7 @@ const PokerTable = () => {
 
   // 出牌操作
   const handlePlayCards = () => {
-    const validation = validatePlayCards(selectedCards);
+    const validation = validatePlayCards(selectedCardIds);
     
     if (!validation.valid) {
       setGameMessage(`❌ ${validation.message}`);
@@ -488,11 +658,207 @@ const PokerTable = () => {
     // 显示出牌预览
     setGameMessage(`🃏 准备出牌: ${validation.cardType.message}`);
 
+    // 将选中ID映射为当前排序中的索引
+    const idSet = new Set(selectedCardIds);
+    const cardIndices = myCards
+      .map((c, idx) => ({ id: c.id, idx }))
+      .filter(x => idSet.has(x.id))
+      .map(x => x.idx);
+
     socketService.emit('playCards', {
       roomId: roomId,
-      cardIndices: selectedCards
+      cardIndices
     });
-    setSelectedCards([]);
+    setSelectedCardIds([]);
+  };
+
+  // 计算可粘主的牌型选项
+  const calculateStickOptions = (cards, gameState) => {
+    console.log('🔍 计算粘主选项 - 游戏阶段:', gameState?.gamePhase, '我的位置:', myPosition);
+    console.log('🔍 我的手牌:', cards);
+    
+    if (!gameState || gameState.gamePhase !== 'sticking') {
+      console.log('❌ 不在粘主阶段');
+      return [];
+    }
+    
+    // 检查是否可以粘主（不是叫主者或反主者）
+    const forbiddenPlayer = gameState.counterTrumpPlayer !== null ? gameState.counterTrumpPlayer : gameState.firstTrumpPlayer;
+    console.log('🔍 禁止粘主的玩家:', forbiddenPlayer, '我的位置:', myPosition);
+    
+    if (myPosition === forbiddenPlayer) {
+      console.log('❌ 我是叫主者或反主者，不能粘主');
+      return [];
+    }
+    
+    const options = [];
+    
+    // 查找所有王
+    const jokers = cards.filter(c => c.suit === 'joker');
+    console.log('🔍 找到的王:', jokers);
+    
+    // 查找所有连对（同花色相邻点数）
+    const pairsBySuit = {};
+    cards.forEach(card => {
+      if (card.suit !== 'joker') {
+        if (!pairsBySuit[card.suit]) pairsBySuit[card.suit] = {};
+        if (!pairsBySuit[card.suit][card.rank]) pairsBySuit[card.suit][card.rank] = [];
+        pairsBySuit[card.suit][card.rank].push(card);
+      }
+    });
+    
+    console.log('🔍 按花色分组的对子:', pairsBySuit);
+    
+    // 为每个王和每个花色的连对组合创建选项
+    jokers.forEach(joker => {
+      Object.keys(pairsBySuit).forEach(suit => {
+        const ranks = Object.keys(pairsBySuit[suit]).filter(rank => pairsBySuit[suit][rank].length >= 2);
+        console.log(`🔍 ${suit}花色的对子:`, ranks);
+        
+        // 查找相邻的连对
+        for (let i = 0; i < ranks.length - 1; i++) {
+          const rank1 = ranks[i];
+          const rank2 = ranks[i + 1];
+          const numeric1 = getNumericRank(rank1);
+          const numeric2 = getNumericRank(rank2);
+          
+          console.log(`🔍 检查连对: ${rank1}(${numeric1}) 和 ${rank2}(${numeric2}), 差值: ${Math.abs(numeric1 - numeric2)}`);
+          
+          if (Math.abs(numeric1 - numeric2) === 1) {
+            const pair1 = pairsBySuit[suit][rank1].slice(0, 2);
+            const pair2 = pairsBySuit[suit][rank2].slice(0, 2);
+            
+            const option = {
+              joker: joker,
+              pairs: [...pair1, ...pair2],
+              suit: suit,
+              ranks: [rank1, rank2],
+              displayName: `${joker.rank === 'big' ? '大王' : '小王'}${suit}${rank1}${rank2}`
+            };
+            
+            console.log('✅ 找到粘主选项:', option);
+            options.push(option);
+          }
+        }
+      });
+    });
+    
+    console.log('🔍 最终粘主选项:', options);
+    return options;
+  };
+
+  // 获取牌的数字值用于排序
+  const getNumericRank = (rank) => {
+    const map = { 'J': 11, 'Q': 12, 'K': 13, 'A': 14 };
+    return typeof rank === 'number' ? rank : map[rank] || 0;
+  };
+
+  // 处理粘主按钮点击
+  const handleStickTrump = (option) => {
+    console.log('🎯 点击粘主按钮:', option);
+    
+    // 先发送开始粘主请求，停止后端倒计时
+    socketService.emit('startSticking', {
+      roomId: roomId
+    });
+    
+    const exchangeData = {
+      option: option,
+      declarerCards: [] // 这里需要从服务器获取原叫主者的牌
+    };
+    console.log('🎯 设置粘主交换数据:', exchangeData);
+    
+    setStickExchange(exchangeData);
+    setSelectedExchangeCards([]);
+    setStickCountdown(null); // 停止前端倒计时显示
+    setStickOptions([]); // 隐藏粘主按钮
+    setGameMessage(`📌 请选择3张交换牌：1张级/常主 + 2张${option.suit}花色牌`);
+    
+    console.log('🎯 粘主交换状态已设置:', {
+      stickExchange: exchangeData,
+      selectedExchangeCards: [],
+      gameMessage: `📌 请选择3张交换牌：1张级/常主 + 2张${option.suit}花色牌`
+    });
+  };
+
+  // 验证粘主交换牌
+  const validateStickExchangeCards = (selectedIds) => {
+    if (!stickExchange || selectedIds.length !== 3) {
+      return { valid: false, message: '需要选择3张牌' };
+    }
+    
+    const { option } = stickExchange;
+    const selectedCards = myCards.filter(card => selectedIds.includes(card.id));
+    
+    console.log('🔍 验证粘主交换牌:', {
+      selectedCards: selectedCards.map(c => `${c.suit}_${c.rank}`),
+      gameState: gameState,
+      currentLevel: gameState?.currentLevel,
+      trumpSuit: gameState?.trumpSuit
+    });
+    
+    // 验证交换牌：1张级牌或常主 + 2张与原叫主者对子同花色的牌
+    const levelOrPermanent = selectedCards.filter(card => 
+      card.suit !== 'joker' && ([2, 3, 5].includes(card.rank) || card.rank === gameState?.currentLevel)
+    );
+    
+    // 原叫主者的主牌花色（玩家0用红桃7叫主，所以需要红桃牌）
+    const originalTrumpSuit = gameState?.trumpSuit; // 应该是hearts
+    const sameSuitAsOriginalTrump = selectedCards.filter(card => card.suit === originalTrumpSuit);
+    
+    console.log('🔍 验证结果:', {
+      levelOrPermanent: levelOrPermanent.length,
+      originalTrumpSuit,
+      sameSuitAsOriginalTrump: sameSuitAsOriginalTrump.length,
+      levelOrPermanentCards: levelOrPermanent.map(c => `${c.suit}_${c.rank}`),
+      sameSuitCards: sameSuitAsOriginalTrump.map(c => `${c.suit}_${c.rank}`)
+    });
+    
+    if (levelOrPermanent.length !== 1) {
+      return { valid: false, message: '需要1张级牌或常主' };
+    }
+    
+    if (sameSuitAsOriginalTrump.length !== 2) {
+      return { valid: false, message: `需要2张${originalTrumpSuit}花色牌` };
+    }
+    
+    return { valid: true, message: '交换牌有效' };
+  };
+
+  // 处理粘主交换
+  const handleStickExchange = () => {
+    if (selectedExchangeCards.length !== 3) {
+      return;
+    }
+    
+    const validation = validateStickExchangeCards(selectedExchangeCards);
+    if (!validation.valid) {
+      setGameMessage(`❌ ${validation.message}`);
+      return;
+    }
+    
+    const { option } = stickExchange;
+    const stickCards = [option.joker, ...option.pairs];
+    // 将选中的交换牌ID转换为完整的牌对象
+    const giveBackCards = selectedExchangeCards.map(cardId => 
+      myCards.find(card => card.id === cardId)
+    ).filter(card => card !== undefined);
+    
+    console.log('🎯 发送粘主请求:', {
+      selectedExchangeCardIds: selectedExchangeCards,
+      giveBackCards: giveBackCards.map(c => `${c.suit}_${c.rank}_${c.deckNumber}`),
+      stickCards: stickCards.map(c => `${c.suit}_${c.rank}_${c.deckNumber}`),
+      myCardsCount: myCards.length
+    });
+    
+    socketService.emit('stickTrump', {
+      roomId: roomId,
+      stickCards: stickCards,
+      giveBackCards: giveBackCards
+    });
+    
+    setStickExchange(null);
+    setSelectedExchangeCards([]);
   };
 
   // 获取玩家位置样式
@@ -525,8 +891,28 @@ const PokerTable = () => {
   const getPhaseDescription = () => {
     if (!gameState) return '等待游戏开始...';
 
+    // 发牌阶段
+    if (gameState.gamePhase === 'dealing') {
+      if (gameState.trumpPlayer !== null && gameState.trumpPlayer !== undefined) {
+        return '发牌阶段反主阶段';
+      } else {
+        return '发牌阶段无人亮主';
+      }
+    }
+    
+    // 发牌结束后
+    if (gameState.gamePhase === 'bidding') {
+      if (gameState.trumpPlayer !== null && gameState.trumpPlayer !== undefined) {
+        return '反主阶段';
+      } else {
+        return '亮主阶段';
+      }
+    }
+    
+    // 其他阶段
     switch (gameState.gamePhase) {
-      case 'bidding': return '亮主阶段';
+      case 'countering': return '反主阶段';
+      case 'sticking': return '粘主阶段';
       case 'playing': return '出牌阶段';
       case 'finished': return '游戏结束';
       default: return '未知阶段';
@@ -562,14 +948,19 @@ const PokerTable = () => {
                   {gameState.trumpRank && ` (${gameState.trumpRank})`}
                 </span>
               )}
-              {trumpCountdown !== null && (
+              {trumpCountdown !== null && gameState?.gamePhase === 'bidding' && (
                 <span className="countdown-info">
                   ⏰ 亮主倒计时: {trumpCountdown}秒
                 </span>
               )}
-              {counterTrumpCountdown !== null && (
+              {counterTrumpCountdown !== null && gameState?.gamePhase === 'countering' && (
                 <span className="countdown-info">
                   🔄 反主倒计时: {counterTrumpCountdown}秒
+                </span>
+              )}
+              {stickCountdown !== null && gameState?.gamePhase === 'sticking' && (
+                <span className="countdown-info">
+                  📌 粘主倒计时: {stickCountdown}秒
                 </span>
               )}
               {gameState?.currentTurn !== undefined && (
@@ -664,12 +1055,41 @@ const PokerTable = () => {
             );
           })}
 
+
+
           {/* 我的手牌区域 */}
           <div className="my-hand-area">
             <div className="hand-controls">
-              {selectedCards.length > 0 && (
+              {/* 粘主选项按钮 */}
+              {stickOptions.length > 0 && !stickExchange && (
+                <div className="stick-options-inline">
+                  {stickOptions.map((option, index) => (
+                    <button
+                      key={index}
+                      onClick={() => handleStickTrump(option)}
+                      className="btn btn-primary"
+                    >
+                      {option.displayName}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {/* 粘主交换状态显示 */}
+              {stickExchange && (
+                <div className="stick-exchange-info" style={{ backgroundColor: '#e3f2fd', padding: '10px', margin: '10px 0', borderRadius: '5px' }}>
+                  <h4>🔄 粘主交换模式</h4>
+                  <p>请选择3张交换牌：1张级牌或常主 + 2张{gameState?.trumpSuit === 'hearts' ? '红桃' : gameState?.trumpSuit}牌</p>
+                  <p>当前已选择：{selectedExchangeCards.length}/3 张</p>
+                </div>
+              )}
+
+              {(selectedCardIds.length > 0 || (stickExchange && selectedExchangeCards.length > 0)) && (
                 <div className="action-buttons">
-                  <span className="selected-count">已选择 {selectedCards.length} 张</span>
+                  <span className="selected-count">
+                    已选择 {stickExchange ? selectedExchangeCards.length : selectedCardIds.length} 张
+                    {stickExchange ? ' (交换牌)' : ''}
+                  </span>
                   {/* 亮主按钮 */}
                   {(gameState?.gamePhase === 'bidding' || gameState?.gamePhase === 'dealing' || trumpCountdown !== null) && 
                    (gameState?.trumpPlayer === null || gameState?.trumpPlayer === undefined) && (
@@ -678,18 +1098,18 @@ const PokerTable = () => {
                         console.log('🎺 亮主按钮点击:', {
                           gamePhase: gameState?.gamePhase,
                           trumpCountdown,
-                          selectedCards: selectedCards.length,
+                          selectedCards: selectedCardIds.length,
                           myPosition
                         });
                         handleDeclareTrump();
                       }}
                       className={`action-btn trump-btn ${
-                        validateTrumpCards(selectedCards).valid ? 'valid' : 'invalid'
+                        validateTrumpCards(selectedCardIds).valid ? 'valid' : 'invalid'
                       }`}
-                      disabled={!validateTrumpCards(selectedCards).valid}
+                      disabled={!validateTrumpCards(selectedCardIds).valid}
                     >
-                      {selectedCards.length === 3 
-                        ? (validateTrumpCards(selectedCards).valid ? '✅ 亮主' : '❌ 无效牌型')
+                      {selectedCardIds.length === 3 
+                        ? (validateTrumpCards(selectedCardIds).valid ? '✅ 亮主' : '❌ 无效牌型')
                         : '亮主 (一王带一对)'
                       }
                     </button>
@@ -697,46 +1117,70 @@ const PokerTable = () => {
                   
                   {/* 反主按钮 */}
                   {gameState?.trumpPlayer !== null && gameState?.trumpPlayer !== undefined && 
-                   (gameState?.counterTrumpEndTime && Date.now() <= gameState.counterTrumpEndTime) &&
+                   // 若有截止时间则要求未过期；若暂无截止时间(发牌中亮主，待发牌结束确定)，也允许反主
+                   ((gameState?.counterTrumpEndTime ? Date.now() <= gameState.counterTrumpEndTime : true)) &&
                    (gameState?.counterTrumpPlayer === null || gameState?.counterTrumpPlayer === undefined) && (
                     <button 
                       onClick={() => {
                         console.log('🔄 反主按钮点击:', {
                           gamePhase: gameState?.gamePhase,
                           counterTrumpEndTime: gameState?.counterTrumpEndTime,
-                          selectedCards: selectedCards.length,
+                          selectedCards: selectedCardIds.length,
                           myPosition
                         });
                         handleCounterTrump();
                       }}
                       className={`action-btn counter-trump-btn ${
-                        validateCounterTrumpCards(selectedCards).valid ? 'valid' : 'invalid'
+                        validateCounterTrumpCards(selectedCardIds).valid ? 'valid' : 'invalid'
                       }`}
-                      disabled={!validateCounterTrumpCards(selectedCards).valid}
+                      disabled={!validateCounterTrumpCards(selectedCardIds).valid}
                     >
-                      {selectedCards.length === 4 
-                        ? (validateCounterTrumpCards(selectedCards).valid ? '✅ 反主' : '❌ 无效牌型')
+                      {selectedCardIds.length === 4 
+                        ? (validateCounterTrumpCards(selectedCardIds).valid ? '✅ 反主' : '❌ 无效牌型')
                         : '反主 (一对王+一对牌)'
                       }
                     </button>
                   )}
+                  
+                  {/* 粘主确认按钮 */}
+                  {console.log('🔍 粘主确认按钮渲染检查:', {
+                    stickExchange: stickExchange,
+                    selectedExchangeCards: selectedExchangeCards,
+                    selectedExchangeCardsLength: selectedExchangeCards.length
+                  })}
+                  {stickExchange && (
+                    <button
+                      onClick={handleStickExchange}
+                      className={`action-btn stick-confirm-btn ${
+                        selectedExchangeCards.length === 3 && validateStickExchangeCards(selectedExchangeCards).valid ? 'valid' : 'invalid'
+                      }`}
+                      disabled={selectedExchangeCards.length !== 3 || !validateStickExchangeCards(selectedExchangeCards).valid}
+                      style={{ backgroundColor: '#4CAF50', color: 'white', margin: '5px', padding: '10px' }} // 强制样式确保可见
+                    >
+                      {selectedExchangeCards.length === 3 
+                        ? (validateStickExchangeCards(selectedExchangeCards).valid ? '✅ 确认粘主' : '❌ 无效牌型')
+                        : `粘主 (${selectedExchangeCards.length}/3)`
+                      }
+                    </button>
+                  )}
+                  
                   {gameState?.gamePhase === 'playing' && (
                     <button 
                       onClick={handlePlayCards} 
                       className={`action-btn play-btn ${
-                        validatePlayCards(selectedCards).valid ? 'valid' : 'invalid'
+                        validatePlayCards(selectedCardIds).valid ? 'valid' : 'invalid'
                       }`}
-                      disabled={!validatePlayCards(selectedCards).valid}
+                      disabled={!validatePlayCards(selectedCardIds).valid}
                     >
-                      {selectedCards.length > 0 
-                        ? (validatePlayCards(selectedCards).valid 
-                          ? `✅ 出牌 (${validatePlayCards(selectedCards).cardType.name})` 
+                      {selectedCardIds.length > 0 
+                        ? (validatePlayCards(selectedCardIds).valid 
+                          ? `✅ 出牌 (${validatePlayCards(selectedCardIds).cardType.name})` 
                           : '❌ 无效牌型')
                         : '出牌'
                       }
                     </button>
                   )}
-                  <button onClick={() => setSelectedCards([])} className="action-btn cancel-btn">
+                  <button onClick={() => setSelectedCardIds([])} className="action-btn cancel-btn">
                     取消选择
                   </button>
                 </div>
@@ -746,7 +1190,7 @@ const PokerTable = () => {
             {/* 使用新的HandCards组件显示我的手牌 */}
             <HandCards
               cards={myCards}
-              selectedCards={selectedCards}
+              selectedCardIds={stickExchange ? selectedExchangeCards : selectedCardIds}
               onCardClick={toggleCardSelection}
               isMyTurn={gameState?.currentTurn === myPosition}
               position="bottom"
@@ -754,10 +1198,14 @@ const PokerTable = () => {
                 // 亮主阶段
                 ((gameState?.gamePhase === 'bidding' || gameState?.gamePhase === 'dealing' || trumpCountdown !== null) && 
                  (gameState?.trumpPlayer === null || gameState?.trumpPlayer === undefined)) ||
-                // 反主阶段
-                (gameState?.trumpPlayer !== null && gameState?.trumpPlayer !== undefined && 
-                 (gameState?.counterTrumpEndTime && Date.now() <= gameState.counterTrumpEndTime) &&
-                 (gameState?.counterTrumpPlayer === null || gameState?.counterTrumpPlayer === undefined))
+                // 反主阶段（叫主者不能反主）
+                (gameState?.gamePhase === 'countering' &&
+                 (gameState?.trumpPlayer !== null && gameState?.trumpPlayer !== undefined) &&
+                 ((gameState?.counterTrumpEndTime ? Date.now() <= gameState.counterTrumpEndTime : true)) &&
+                 (gameState?.counterTrumpPlayer === null || gameState?.counterTrumpPlayer === undefined) &&
+                 (gameState?.firstTrumpPlayer !== myPosition)) ||
+                // 粘主交换阶段（可以选择交换牌）
+                (stickExchange !== null)
               }
             />
           </div>

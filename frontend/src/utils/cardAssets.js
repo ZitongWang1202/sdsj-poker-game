@@ -17,7 +17,7 @@ export const getCardImagePath = (card) => {
 
   // 处理大小王
   if (card.suit === 'JOKER' || card.suit === 'joker') {
-    console.log('🃏 处理大小王:', { suit: card.suit, rank: card.rank });
+    // console.log('🃏 处理大小王:', { suit: card.suit, rank: card.rank });
     if (card.rank === 'BIG' || card.rank === 'big') {
       return '/assets/cards/JOKER/BIG_JOKER.svg';
     }
@@ -25,7 +25,7 @@ export const getCardImagePath = (card) => {
       return '/assets/cards/JOKER/SMALL_JOKER.svg';
     }
     // 如果都不匹配，记录错误信息
-    console.warn('⚠️ 大小王rank不匹配:', card.rank);
+    // console.warn('⚠️ 大小王rank不匹配:', card.rank);
   }
 
   // 处理普通牌

@@ -145,6 +145,10 @@ class SocketService {
     this.emit('createRoom', playerName);
   }
 
+  createTestRoom(playerName) {
+    this.emit('createTestRoom', playerName);
+  }
+
   joinRoom(roomId, playerName) {
     this.emit('joinRoom', { roomId, playerName });
   }

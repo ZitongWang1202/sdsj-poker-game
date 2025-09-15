@@ -7,6 +7,10 @@ class Room {
     this.gameStarted = false;
     this.game = null;
     this.createdAt = new Date();
+    // 测试房间相关元数据
+    this.isTestRoom = false;
+    this.presetCards = null;
+    this.presetType = null;
   }
 
   // 添加玩家

@@ -150,6 +150,20 @@ const GameLobby = () => {
     socketService.createRoom(playerName.trim());
   };
 
+  const handleCreateTestRoom = () => {
+    if (!playerName.trim()) {
+      setMessage('❌ 请输入玩家名称');
+      return;
+    }
+    if (connectionStatus !== 'connected') {
+      setMessage('❌ 请等待连接到服务器');
+      return;
+    }
+    setLoading(true);
+    setMessage('🔄 正在创建测试房间...');
+    socketService.createTestRoom(playerName.trim());
+  };
+
   const handleJoinRoom = (targetRoomId = null) => {
     if (!playerName.trim()) {
       setMessage('❌ 请输入玩家名称');
@@ -238,6 +252,14 @@ const GameLobby = () => {
                   className="btn btn-primary"
                 >
                   {loading ? <span className="loading"></span> : ''} 创建房间
+                </button>
+                <button 
+                  onClick={handleCreateTestRoom}
+                  disabled={loading || connectionStatus !== 'connected'}
+                  className="btn btn-warning"
+                  style={{ marginLeft: '8px' }}
+                >
+                  {loading ? <span className="loading"></span> : ''} 创建测试房间
                 </button>
               </div>
 

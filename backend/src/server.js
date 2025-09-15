@@ -72,21 +72,24 @@ function startDealingAnimation(io, roomId, gameManager) {
         }
       });
       
-      // 启动10秒亮主倒计时
-      room.trumpCountdownTimer = setTimeout(() => {
-        if (room.game.gamePhase === 'dealing') {
-          // 如果10秒内没有人亮主，自动进入出牌阶段
-          room.game.gamePhase = 'bidding';
-          console.log('⏰ 亮主时间结束，进入出牌阶段');
-          
-          // 通知所有玩家
-          io.to(roomId).emit('trumpTimeEnded', {
-            gameState: room.game.getGameState()
-          });
+      // 通知模型“发牌动画完成”，再读取状态
+      if (room && room.game && typeof room.game.onDealingCompleted === 'function') {
+        room.game.onDealingCompleted();
+      }
+      const gsAfterDeal = room.game.getGameState();
+      io.to(roomId).emit('biddingStarted', {
+        gameState: gsAfterDeal,
+        declareEndTime: gsAfterDeal.declareEndTime
+      });
+
+      // 在叫主截止时刻，若仍无人亮主且游戏被模型置为finished，则广播超时/结束
+      const msToDeclareEnd = Math.max(0, (gsAfterDeal.declareEndTime || 0) - Date.now());
+      setTimeout(() => {
+        const snap = room?.game?.getGameState?.() || null;
+        if (snap && !snap.trumpSuit && snap.gamePhase === 'finished') {
+          io.to(roomId).emit('biddingTimeout', { gameState: snap });
         }
-        // 清除倒计时引用
-        room.trumpCountdownTimer = null;
-      }, 10000);
+      }, msToDeclareEnd + 10);
       
       return;
     }
@@ -124,7 +127,7 @@ function startDealingAnimation(io, roomId, gameManager) {
     }
     
     currentCardIndex++;
-  }, 1000); // 每秒发一张牌
+  }, 500); // 每0.5秒发一张牌
 }
 
 // Socket.io连接处理
@@ -137,8 +140,19 @@ io.on('connection', (socket) => {
   socket.on('createRoom', (playerName) => {
     const room = gameManager.createRoom(socket.id, playerName);
     socket.join(room.id);
-    socket.emit('roomCreated', room);
+    socket.emit('roomCreated', room.getStatus());
     console.log(`房间创建: ${room.id}, 玩家: ${playerName}`);
+  });
+
+  // 创建测试房间（固定发牌）
+  socket.on('createTestRoom', (playerName) => {
+    const room = gameManager.createRoom(socket.id, playerName);
+    // 标记为测试房间
+    room.isTestRoom = true;
+    room.name = `${playerName}的测试房间`;
+    socket.join(room.id);
+    socket.emit('roomCreated', room.getStatus());
+    console.log(`测试房间创建: ${room.id}, 玩家: ${playerName}`);
   });
 
   // 加入房间
@@ -148,8 +162,8 @@ io.on('connection', (socket) => {
     
     if (result.success) {
       socket.join(roomId);
-      socket.emit('joinedRoom', result.room);
-      socket.to(roomId).emit('playerJoined', result.room);
+      socket.emit('joinedRoom', result.room.getStatus());
+      socket.to(roomId).emit('playerJoined', result.room.getStatus());
       console.log(`玩家 ${playerName} 加入房间 ${roomId}`);
       
       // 如果游戏已经开始或存在进行中的游戏，向新加入的玩家发送手牌/状态快照，避免错过发牌事件
@@ -177,12 +191,29 @@ io.on('connection', (socket) => {
 
       // 如果房间人满，开始游戏
       if (result.room.players.length === 4) {
-        gameManager.startGame(roomId);
+        // 测试房间则用固定发牌
+        if (result.room.isTestRoom) {
+          const presets = gameManager.generateTestPresets();
+          gameManager.startGame(roomId, true, presets);
+        } else {
+          gameManager.startGame(roomId);
+        }
+        
+        // 设置粘主阶段进入回调
+        const room = gameManager.getRoom(roomId);
+        if (room && room.game) {
+          room.game._onStickPhaseEntered = () => {
+            io.to(roomId).emit('stickingStarted', {
+              stickEndTime: room.game.getGameState().stickEndTime,
+              gameState: room.game.getGameState()
+            });
+          };
+        }
         
         // 通知游戏开始
         io.to(roomId).emit('gameStarted', {
           message: '🎮 游戏开始！正在发牌...',
-          room: result.room
+          room: result.room.getStatus()
         });
         
         // 开始逐张发牌动画
@@ -207,7 +238,7 @@ io.on('connection', (socket) => {
   socket.on('getRoomInfo', (roomId) => {
     const room = gameManager.getRoom(roomId);
     if (room) {
-      socket.emit('roomInfo', room);
+      socket.emit('roomInfo', room.getStatus());
     }
   });
 
@@ -240,11 +271,7 @@ io.on('connection', (socket) => {
     
     if (result.success) {
       // 清除亮主倒计时
-      if (room.trumpCountdownTimer) {
-        clearTimeout(room.trumpCountdownTimer);
-        room.trumpCountdownTimer = null;
-        console.log('⏰ 有人亮主成功，清除倒计时');
-      }
+      // 已改为模型内部计时，这里无需房间层倒计时
       
       // 通知所有玩家亮主成功
       io.to(roomId).emit('trumpDeclared', {
@@ -255,6 +282,12 @@ io.on('connection', (socket) => {
         gameState: room.game.getGameState()
       });
       console.log(`✅ 玩家 ${playerInfo.player.name} 亮主成功: ${result.trumpSuit}`);
+
+      // 广播进入反主阶段及截止时间
+      io.to(roomId).emit('counteringStarted', {
+        counterTrumpEndTime: room.game.getGameState().counterTrumpEndTime,
+        gameState: room.game.getGameState()
+      });
     } else {
       console.log(`❌ 玩家 ${playerInfo.player.name} 亮主失败: ${result.message}`);
       socket.emit('trumpError', result.message);
@@ -299,9 +332,102 @@ io.on('connection', (socket) => {
         gameState: room.game.getGameState()
       });
       console.log(`✅ 玩家 ${playerInfo.player.name} 反主成功: 一对${result.counterTrumpRank === 'big' ? '大王' : '小王'} + 一对${result.counterTrumpPair}`);
+
+      // 反主成功后直接进入粘主阶段（模型已切换），广播粘主开始与截止时间
+      io.to(roomId).emit('stickingStarted', {
+        stickEndTime: room.game.getGameState().stickEndTime,
+        gameState: room.game.getGameState()
+      });
     } else {
       console.log(`❌ 玩家 ${playerInfo.player.name} 反主失败: ${result.message}`);
       socket.emit('counterTrumpError', result.message);
+    }
+  });
+
+  // 开始粘主（停止倒计时）
+  socket.on('startSticking', (data) => {
+    const { roomId } = data;
+    console.log(`📌 收到开始粘主请求 - Socket ID: ${socket.id}, 房间: ${roomId}`);
+
+    const playerInfo = gameManager.getPlayerInfo(socket.id);
+    if (!playerInfo) {
+      socket.emit('startStickingError', '玩家信息不存在');
+      return;
+    }
+
+    const room = gameManager.getRoom(roomId);
+    if (!room || !room.game) {
+      socket.emit('startStickingError', '房间或游戏不存在');
+      return;
+    }
+
+    const result = room.game.startSticking(playerInfo.player.position);
+    if (result.success) {
+      // 通知所有玩家粘主倒计时停止（使用新的事件名）
+      io.to(roomId).emit('stickingCountdownStopped', {
+        playerName: playerInfo.player.name,
+        playerId: playerInfo.player.position,
+        message: `${playerInfo.player.name} 开始粘主，倒计时停止`
+      });
+      console.log(`玩家 ${playerInfo.player.name} 开始粘主，倒计时停止`);
+    } else {
+      socket.emit('startStickingError', result.message);
+    }
+  });
+
+  // 粘主（1王+同花相邻两对），并与原叫主者交换
+  socket.on('stickTrump', (data) => {
+    const { roomId, stickCards, giveBackCards } = data;
+    console.log(`📌 收到粘主请求 - Socket ID: ${socket.id}, 房间: ${roomId}, 粘主牌: ${stickCards?.length}, 回馈牌: ${giveBackCards?.length}`);
+
+    const playerInfo = gameManager.getPlayerInfo(socket.id);
+    if (!playerInfo) {
+      socket.emit('stickTrumpError', '玩家信息不存在');
+      return;
+    }
+
+    const room = gameManager.getRoom(roomId);
+    if (!room || !room.game) {
+      socket.emit('stickTrumpError', '房间或游戏不存在');
+      return;
+    }
+
+    const result = room.game.stickTrump(playerInfo.player.position, stickCards, giveBackCards);
+    if (result.success) {
+      // 通知所有玩家粘主交换完成
+      io.to(roomId).emit('trumpSticked', {
+        playerName: playerInfo.player.name,
+        playerId: playerInfo.player.position,
+        takenFromDeclarer: result.takenFromDeclarer,
+        givenToDeclarer: result.givenToDeclarer,
+        gameState: room.game.getGameState()
+      });
+
+      // 向双方同步手牌更新
+      const declarerId = room.game.getGameState().firstTrumpPlayer;
+      const declarer = room.players[declarerId];
+      const playerSocket = io.sockets.sockets.get(playerInfo.player.socketId);
+      const declarerSocket = declarer ? io.sockets.sockets.get(declarer.socketId) : null;
+      if (playerSocket) {
+        playerSocket.emit('handUpdated', {
+          cards: playerInfo.player.cards,
+          gameState: room.game.getGameState()
+        });
+      }
+      if (declarerSocket) {
+        declarerSocket.emit('handUpdated', {
+          cards: declarer.cards,
+          gameState: room.game.getGameState()
+        });
+      }
+
+      // 广播游戏进入出牌阶段
+      io.to(roomId).emit('gamePhaseChanged', {
+        phase: 'playing',
+        gameState: room.game.getGameState()
+      });
+    } else {
+      socket.emit('stickTrumpError', result.message);
     }
   });
 

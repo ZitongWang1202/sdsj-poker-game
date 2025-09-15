@@ -6,25 +6,25 @@ import './HandCards.css';
  * 手牌组件 - 实现卡牌重叠显示效果
  * @param {Object} props 
  * @param {Array} props.cards - 卡牌数组
- * @param {Array} props.selectedCards - 选中的卡牌索引数组
- * @param {Function} props.onCardClick - 卡牌点击回调
+ * @param {Array} props.selectedCardIds - 选中的卡牌ID数组
+ * @param {Function} props.onCardClick - 卡牌点击回调（参数为cardId）
  * @param {boolean} props.isMyTurn - 是否是我的回合
  * @param {string} props.position - 手牌位置 ('bottom', 'top', 'left', 'right')
  * @param {boolean} props.canSelect - 是否可以选牌（用于亮主阶段）
  */
 const HandCards = ({ 
   cards = [], 
-  selectedCards = [], 
+  selectedCardIds = [], 
   onCardClick = () => {}, 
   isMyTurn = false,
   position = 'bottom',
   canSelect = false
 }) => {
   
-  const handleCardClick = (cardIndex) => {
+  const handleCardClick = (cardId) => {
     // 在亮主阶段，所有玩家都可以选牌；在出牌阶段，只有当前回合玩家可以选牌
     if ((canSelect || isMyTurn) && onCardClick) {
-      onCardClick(cardIndex);
+      onCardClick(cardId);
     }
   };
 
@@ -50,7 +50,7 @@ const HandCards = ({
     switch (position) {
       case 'bottom': // 底部玩家（自己）
         style.left = `${index * offset}px`;
-        style.bottom = selectedCards.includes(index) ? '20px' : '0px';
+        style.bottom = '0px';
         break;
       case 'top': // 顶部玩家
         style.left = `${index * offset}px`;
@@ -81,10 +81,13 @@ const HandCards = ({
     <div className={getContainerClass()}>
       {cards.map((card, index) => (
         <div
-          key={`${card.suit}-${card.rank}-${index}`}
-          className={`hand-card-item ${selectedCards.includes(index) ? 'selected' : ''}`}
-          style={getCardStyle(index, cards.length)}
-          onClick={() => handleCardClick(index)}
+          key={card.id}
+          className={`hand-card-item ${selectedCardIds.includes(card.id) ? 'selected' : ''}`}
+          style={{
+            ...getCardStyle(index, cards.length),
+            bottom: selectedCardIds.includes(card.id) ? '20px' : '0px'
+          }}
+          onClick={() => handleCardClick(card.id)}
           title={`${card.suit} ${card.rank}`}
         >
           <img

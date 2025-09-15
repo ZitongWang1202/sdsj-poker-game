@@ -1,6 +1,7 @@
 const Room = require('../models/Room');
 const Player = require('../models/Player');
 const ShandongUpgradeGame = require('../models/ShandongUpgradeGame');
+const Card = require('../models/Card');
 
 class GameManager {
   constructor() {
@@ -50,10 +51,80 @@ class GameManager {
       return false;
     }
 
+    // 若房间为测试模式但未提供预设，则生成默认预设
+    if (room.isTestRoom) {
+      debugMode = true;
+      if (!presetCards) {
+        presetCards = this.generateTestPresets();
+        room.presetCards = presetCards;
+      }
+    }
+
     const game = new ShandongUpgradeGame(room.players, debugMode, presetCards);
     room.startGame(game);
     
     return true;
+  }
+
+  // 生成测试用的固定发牌（示例：玩家0有一王+一对♥7，玩家1有一对王+一对8，便于亮主/反主测试）
+  generateTestPresets() {
+    const suits = ['spades', 'hearts', 'diamonds', 'clubs'];
+    const ranks = [2,3,4,5,6,7,8,9,10,'J','Q','K','A'];
+
+    // 构造两副完整牌
+    const deck = [];
+    for (let d = 0; d < 2; d++) {
+      for (const s of suits) {
+        for (const r of ranks) deck.push(new Card(s, r, d));
+      }
+      deck.push(new Card('joker','small', d));
+      deck.push(new Card('joker','big', d));
+    }
+
+    // 洗牌的确定性：这里不洗，使用固定顺序，后续按需要抽取
+    const take = (predicate, count) => {
+      const res = [];
+      for (let i = deck.length - 1; i >= 0 && res.length < count; i--) {
+        if (predicate(deck[i])) res.push(deck.splice(i,1)[0]);
+      }
+      return res;
+    };
+
+    const p0 = [];
+    const p1 = [];
+    const p2 = [];
+    const p3 = [];
+
+    // 玩家0：一张王（大王）+ ♥7♥7
+    p0.push(...take(c => c.suit==='joker' && c.rank==='big', 1));
+    p0.push(...take(c => c.suit==='hearts' && c.rank===7, 2));
+
+    // 玩家1：一对王（小王对）+ 任意一对8（优先♠8♠8）
+    p1.push(...take(c => c.suit==='joker' && c.rank==='small', 2));
+    const eightPair = take(c => c.suit==='spades' && c.rank===8, 2);
+    if (eightPair.length < 2) p1.push(...take(c => c.rank===8, 2 - eightPair.length));
+    else p1.push(...eightPair);
+
+    // 玩家2：一张大王 + ♠J♠J + ♠Q♠Q（用于测试粘主）+ 级牌7和黑桃牌用于回馈 + 红桃牌
+    p2.push(...take(c => c.suit==='joker' && c.rank==='big', 1));
+    p2.push(...take(c => c.suit==='spades' && c.rank==='J', 2));
+    p2.push(...take(c => c.suit==='spades' && c.rank==='Q', 2));
+    // 粘主回馈牌：1张级牌7 + 2张黑桃牌（按规则必须是联对同花色）
+    p2.push(...take(c => c.rank === 7, 1)); // 级牌7（任意花色）
+    p2.push(...take(c => c.suit==='spades' && c.rank !== 'J' && c.rank !== 'Q', 4)); // 4张其他黑桃牌（确保有足够选择）
+    // 额外添加红桃牌（如果需要）
+    p2.push(...take(c => c.suit==='hearts', 3)); // 3张红桃牌
+
+    // 玩家3：一张小王 + ♥9♥9 + ♥10♥10（用于测试粘主）
+    p3.push(...take(c => c.suit==='joker' && c.rank==='small', 1));
+    p3.push(...take(c => c.suit==='hearts' && c.rank===9, 2));
+    p3.push(...take(c => c.suit==='hearts' && c.rank===10, 2));
+
+    // 填满各自到26张
+    const fillTo = (arr, n) => { while (arr.length < n && deck.length) arr.push(deck.pop()); };
+    fillTo(p0, 26); fillTo(p1, 26); fillTo(p2, 26); fillTo(p3, 26);
+
+    return [p0, p1, p2, p3];
   }
 
   // 获取可用房间列表
