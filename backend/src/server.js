@@ -472,6 +472,50 @@ io.on('connection', (socket) => {
     }
   });
 
+  // 离开房间
+  socket.on('leaveRoom', (data) => {
+    const { roomId } = data;
+    const playerInfo = gameManager.getPlayerInfo(socket.id);
+    
+    if (!playerInfo) {
+      console.log(`❌ 玩家离开房间失败: 玩家信息不存在 ${socket.id}`);
+      return;
+    }
+    
+    const room = gameManager.getRoom(roomId);
+    if (!room) {
+      console.log(`❌ 玩家离开房间失败: 房间不存在 ${roomId}`);
+      return;
+    }
+    
+    const playerName = playerInfo.player.name;
+    
+    // 让玩家离开Socket.io房间
+    socket.leave(roomId);
+    
+    // 从房间中移除玩家
+    gameManager.removePlayer(socket.id);
+    
+    // 检查房间是否还存在（如果是最后一个玩家，房间已被删除）
+    const updatedRoom = gameManager.getRoom(roomId);
+    if (updatedRoom) {
+      // 通知房间内其他玩家
+      socket.to(roomId).emit('playerLeft', {
+        playerName: playerName,
+        room: updatedRoom.getStatus(),
+        message: `玩家 ${playerName} 离开了房间`
+      });
+      console.log(`✅ 玩家 ${playerName} 离开房间 ${roomId}，房间还有 ${updatedRoom.players.length} 人`);
+    } else {
+      console.log(`🏠 房间 ${roomId} 已解散（最后一个玩家 ${playerName} 离开）`);
+    }
+    
+    // 向离开的玩家确认
+    socket.emit('leftRoom', {
+      message: '已成功离开房间'
+    });
+  });
+
   // 断开连接
   socket.on('disconnect', () => {
     console.log(`玩家断开连接: ${socket.id}`);

@@ -125,6 +125,19 @@ const GameLobby = () => {
       setAvailableRooms(rooms);
     }, 'GameLobby');
 
+    socketService.on('playerLeft', (data) => {
+      console.log('👋 玩家离开房间:', data);
+      if (currentRoom && currentRoom.id === data.room.id) {
+        setCurrentRoom(data.room);
+        setMessage(data.message);
+      }
+    }, 'GameLobby');
+
+    socketService.on('leftRoom', (data) => {
+      console.log('✅ 成功离开房间:', data);
+      setMessage(data.message);
+    }, 'GameLobby');
+
     // 设置初始连接状态
     setLoading(true);
     setMessage('🔄 正在连接服务器...');
@@ -190,6 +203,28 @@ const GameLobby = () => {
     if (connectionStatus === 'connected') {
       socketService.getRooms();
       setMessage('🔄 刷新房间列表');
+    }
+  };
+
+  const handleLeaveRoom = () => {
+    if (currentRoom) {
+      setMessage('🔄 正在离开房间...');
+      
+      // 通知服务器玩家离开房间
+      socketService.emit('leaveRoom', {
+        roomId: currentRoom.id
+      });
+      
+      // 重置状态
+      setCurrentRoom(null);
+      setMessage('✅ 已离开房间');
+      
+      // 刷新房间列表
+      setTimeout(() => {
+        if (connectionStatus === 'connected') {
+          socketService.getRooms();
+        }
+      }, 500);
     }
   };
 
@@ -325,13 +360,22 @@ const GameLobby = () => {
         </div>
       ) : (
         <div className="room-view card">
-          <h2>房间: {currentRoom.id} - {currentRoom.name}</h2>
+          <div className="room-header">
+            <h2>房间: {currentRoom.id} - {currentRoom.name}</h2>
+            <button 
+              className="btn btn-secondary back-btn"
+              onClick={handleLeaveRoom}
+              title="离开房间"
+            >
+              ← 返回大厅
+            </button>
+          </div>
           
           <div className="players-section">
             <h3>玩家列表 ({currentRoom.players.length}/4)</h3>
             <div className="players-grid">
               {currentRoom.players.map((player, index) => (
-                <div key={player.socketId} className="player-item">
+                <div key={`player-${index}-${player.name}`} className="player-item">
                   <div className="player-avatar">👤</div>
                   <div className="player-info">
                     <div className="player-name">{player.name}</div>
