@@ -32,7 +32,6 @@ const GameTable = ({ room, onLeaveRoom }) => {
 
     // 监听亮主事件
     socket.on('trumpDeclared', (data) => {
-      setMessage(`🎺 ${data.playerName} 亮主: ${data.trumpSuit}`);
       // 重新排序手牌（根据主牌）
       if (myCards.length > 0) {
         setMyCards(sortCards(myCards, gameState?.currentLevel, data.trumpSuit));
@@ -99,16 +98,11 @@ const GameTable = ({ room, onLeaveRoom }) => {
       setMessage('❌ 请选择要出的牌');
       return;
     }
-    // 将选中ID映射为当前排序中的索引
-    const idSet = new Set(selectedCardIds);
-    const cardIndices = myCards
-      .map((c, idx) => ({ id: c.id, idx }))
-      .filter(x => idSet.has(x.id))
-      .map(x => x.idx);
-
+    
+    // 直接发送牌的ID，而不是索引
     socketService.emit('playCards', {
       roomId: room.id,
-      cardIndices
+      cardIds: selectedCardIds
     });
     setSelectedCardIds([]);
   };

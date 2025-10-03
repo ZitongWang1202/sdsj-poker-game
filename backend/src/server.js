@@ -26,6 +26,7 @@ const io = socketIo(server, {
 
 // 游戏状态管理
 const GameManager = require('./controllers/GameManager');
+const ShandongUpgradeGame = require('./models/ShandongUpgradeGame');
 const gameManager = new GameManager();
 
 // 逐张发牌动画函数
@@ -99,35 +100,46 @@ function startDealingAnimation(io, roomId, gameManager) {
     const playerCardIndex = Math.floor(currentCardIndex / room.players.length);
     const player = room.players[playerIndex];
     
-    if (player && playerCardIndex < player.cards.length) {
-      const card = player.cards[playerCardIndex];
-      
-      // 发送单张牌事件给所有玩家（用于动画效果）
-      io.to(roomId).emit('cardDealt', {
-        toPlayer: playerIndex,
-        cardIndex: playerCardIndex,
-        totalDealt: currentCardIndex + 1,
-        totalCards: totalCards,
-        playerCardIndex: playerCardIndex + 1,
-        totalPlayerCards: totalCardsPerPlayer
-      });
-      
-      // 只给目标玩家发送实际牌面信息
-      const playerSocket = io.sockets.sockets.get(player.socketId);
-      if (playerSocket) {
-        playerSocket.emit('cardReceived', {
-          card: card,
-          cardIndex: playerCardIndex,
-          totalReceived: playerCardIndex + 1,
-          totalPlayerCards: totalCardsPerPlayer
-        });
-      }
-      
-      console.log(`🃏 第${currentCardIndex + 1}张牌：给玩家 ${player.name} 发第${playerCardIndex + 1}张牌`);
+    // 确保玩家存在且还有牌要发
+    if (!player) {
+      console.log(`❌ 玩家不存在 - 索引: ${playerIndex}`);
+      currentCardIndex++;
+      return;
     }
     
+    if (playerCardIndex >= player.cards.length) {
+      console.log(`❌ 玩家 ${player.name} 已发完所有牌 - 索引: ${playerCardIndex}/${player.cards.length}`);
+      currentCardIndex++;
+      return;
+    }
+    
+    const card = player.cards[playerCardIndex];
+    
+    // 发送单张牌事件给所有玩家（用于动画效果）
+    io.to(roomId).emit('cardDealt', {
+      toPlayer: playerIndex,
+      cardIndex: playerCardIndex,
+      totalDealt: currentCardIndex + 1,
+      totalCards: totalCards,
+      playerCardIndex: playerCardIndex + 1,
+      totalPlayerCards: totalCardsPerPlayer
+    });
+    
+    // 只给目标玩家发送实际牌面信息
+    const playerSocket = io.sockets.sockets.get(player.socketId);
+    if (playerSocket) {
+      playerSocket.emit('cardReceived', {
+        card: card,
+        cardIndex: playerCardIndex,
+        totalReceived: playerCardIndex + 1,
+        totalPlayerCards: totalCardsPerPlayer
+      });
+    }
+    
+    console.log(`🃏 第${currentCardIndex + 1}张牌：给玩家 ${player.name} 发第${playerCardIndex + 1}张牌`);
+    
     currentCardIndex++;
-  }, 500); // 每0.5秒发一张牌
+  }, 200); // 每0.2秒发一张牌
 }
 
 // Socket.io连接处理
@@ -207,6 +219,30 @@ io.on('connection', (socket) => {
               stickEndTime: room.game.getGameState().stickEndTime,
               gameState: room.game.getGameState()
             });
+          };
+          
+          // 设置摸底阶段进入回调
+          room.game._onBottomPhaseEntered = () => {
+            const gameState = room.game.getGameState();
+            const bottomPlayer = room.players[gameState.bottomPlayer];
+            
+            // 广播摸底阶段开始
+            io.to(roomId).emit('bottomPhaseStarted', {
+              bottomPlayer: gameState.bottomPlayer,
+              bottomPlayerName: bottomPlayer?.name,
+              gameState: gameState
+            });
+            
+            // 更新摸底玩家的手牌（因为添加了4张底牌）
+            if (bottomPlayer) {
+              const playerSocket = io.sockets.sockets.get(bottomPlayer.socketId);
+              if (playerSocket) {
+                playerSocket.emit('handUpdated', {
+                  cards: bottomPlayer.cards,
+                  gameState: gameState
+                });
+              }
+            }
           };
         }
         
@@ -433,7 +469,7 @@ io.on('connection', (socket) => {
 
   // 出牌
   socket.on('playCards', (data) => {
-    const { roomId, cardIndices } = data;
+    const { roomId, cardIds } = data;
     const playerInfo = gameManager.getPlayerInfo(socket.id);
     
     if (!playerInfo) {
@@ -447,7 +483,10 @@ io.on('connection', (socket) => {
       return;
     }
     
-    const result = room.game.playCards(playerInfo.player.position, cardIndices);
+    // 检查是否轮次即将结束（这是第4个玩家出牌）
+    const wasRoundComplete = (room.game.roundCards.length === 3);
+    
+    const result = room.game.playCardsByIds(playerInfo.player.position, cardIds);
     if (result.success) {
       // 通知所有玩家出牌
       io.to(roomId).emit('cardsPlayed', {
@@ -467,8 +506,142 @@ io.on('connection', (socket) => {
       }
       
       console.log(`玩家 ${playerInfo.player.name} 出牌: ${result.cards.length}张`);
+      
+      // 如果刚刚完成了一轮（第4个玩家出牌）
+      if (wasRoundComplete) {
+        console.log('🎯 轮次已完成，准备发送轮次结束通知');
+        
+        // 延迟一点时间显示轮次结束信息，让玩家看到最后的出牌
+        setTimeout(() => {
+          // 获取轮次获胜者信息（evaluateRound已经在playCardsByIds中调用了）
+          const roundWinner = room.game.lastWinner;
+          const winnerPlayer = room.players[roundWinner];
+          const gameState = room.game.getGameState();
+          
+          // 通知轮次结束
+          io.to(roomId).emit('roundComplete', {
+            winner: roundWinner,
+            winnerName: winnerPlayer ? winnerPlayer.name : `玩家${roundWinner + 1}`,
+            gameState: gameState
+          });
+          
+          console.log(`🏆 轮次结束，获胜者: ${winnerPlayer ? winnerPlayer.name : `玩家${roundWinner + 1}`}`);
+          
+          // 如果游戏没有结束，准备下一轮
+          if (gameState.gamePhase !== 'finished') {
+            // 再延迟一点清空桌面，准备下一轮
+            setTimeout(() => {
+              io.to(roomId).emit('newRoundStarted', {
+                currentTurn: room.game.currentTurn,
+                gameState: room.game.getGameState()
+              });
+            }, 2000);
+          } else {
+            // 游戏结束，延迟发送最终结果
+            setTimeout(() => {
+              io.to(roomId).emit('gameFinished', {
+                finalResult: result.finalResult || room.game.calculateFinalResults(),
+                gameState: gameState
+              });
+            }, 3000);
+            // 进入等待下一局：向所有客户端广播readyForNextGame
+            setTimeout(() => {
+              const r = gameManager.getRoom(roomId);
+              if (!r || !r.game) return;
+              r.nextGameReady = new Set();
+              r.nextGameContext = (result.finalResult || r.game.calculateFinalResults());
+              io.to(roomId).emit('readyForNextGame', { finalResult: r.nextGameContext });
+            }, 5000);
+          }
+        }, 1000);
+      }
     } else {
       socket.emit('playError', result.message);
+    }
+  });
+
+  // 摸底
+  socket.on('handleBottomCards', (data) => {
+    const { roomId, selectedCardIds } = data;
+    console.log(`🃏 收到摸底请求 - Socket ID: ${socket.id}, 房间: ${roomId}, 选中牌数: ${selectedCardIds?.length}`);
+    
+    const playerInfo = gameManager.getPlayerInfo(socket.id);
+    if (!playerInfo) {
+      socket.emit('bottomCardsError', '玩家信息不存在');
+      return;
+    }
+    
+    const room = gameManager.getRoom(roomId);
+    if (!room || !room.game) {
+      socket.emit('bottomCardsError', '房间或游戏不存在');
+      return;
+    }
+    
+    const result = room.game.handleBottomCards(playerInfo.player.position, selectedCardIds);
+    if (result.success) {
+      // 通知所有玩家摸底完成
+      io.to(roomId).emit('bottomCardsHandled', {
+        playerName: playerInfo.player.name,
+        playerId: playerInfo.player.position,
+        gameState: room.game.getGameState(),
+        message: '摸底完成，进入出牌阶段'
+      });
+      
+      // 更新摸底玩家的手牌
+      const playerSocket = io.sockets.sockets.get(playerInfo.player.socketId);
+      if (playerSocket) {
+        playerSocket.emit('handUpdated', {
+          cards: playerInfo.player.cards,
+          gameState: room.game.getGameState()
+        });
+      }
+      
+      console.log(`✅ 玩家 ${playerInfo.player.name} 摸底完成`);
+    } else {
+      console.log(`❌ 玩家 ${playerInfo.player.name} 摸底失败: ${result.message}`);
+      socket.emit('bottomCardsError', result.message);
+    }
+  });
+
+  // 客户端：我已准备好开始下一局
+  socket.on('readyNext', (data) => {
+    const { roomId } = data || {};
+    const playerInfo = gameManager.getPlayerInfo(socket.id);
+    if (!playerInfo) return;
+    const room = gameManager.getRoom(roomId);
+    if (!room) return;
+    if (!room.nextGameReady) room.nextGameReady = new Set();
+    room.nextGameReady.add(playerInfo.player.position);
+    // 广播当前就绪人数
+    const count = room.nextGameReady.size;
+    io.to(roomId).emit('nextGameReadyProgress', { count });
+  });
+
+  // 客户端：发起开始下一局（需要4人都ready）
+  socket.on('startNextGame', (data) => {
+    const { roomId } = data || {};
+    const room = gameManager.getRoom(roomId);
+    if (!room) return;
+    // 需要4人全部就绪
+    if (!room.nextGameReady || room.nextGameReady.size < 4) {
+      io.to(roomId).emit('startNextGameRejected', { reason: '需要四名玩家全部就绪' });
+      return;
+    }
+    try {
+      const finalRes = room.nextGameContext;
+      const nextGame = new ShandongUpgradeGame(room.players, !!room.isTestRoom, room.presetCards || null);
+      if (finalRes?.newLevel) nextGame.currentLevel = finalRes.newLevel;
+      if (typeof finalRes?.newDealer === 'number') nextGame.dealer = finalRes.newDealer;
+      nextGame.isFirstRound = false;
+      room.game = nextGame;
+      room.gameStarted = true;
+      // 清空等待集合
+      room.nextGameReady = new Set();
+      // 广播进入发牌动画
+      startDealingAnimation(io, roomId, gameManager);
+    } catch (e) {
+      console.error('startNextGame 失败:', e);
+      io.to(roomId).emit('startNextGameRejected', { reason: '服务器内部错误' });
     }
   });
 

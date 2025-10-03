@@ -26,7 +26,6 @@ const GameInterface = ({ room }) => {
 
     // 监听亮主事件
     socket.on('trumpDeclared', (data) => {
-      setGameMessage(`🎺 ${data.playerName} 亮主: ${data.trumpSuit}`);
       setGameState(data.gameState);
       // 重新排序手牌（根据主牌）
       if (myCards.length > 0) {
@@ -93,15 +92,11 @@ const GameInterface = ({ room }) => {
       setGameMessage('❌ 请选择要出的牌');
       return;
     }
-    const idSet = new Set(selectedCardIds);
-    const cardIndices = myCards
-      .map((c, idx) => ({ id: c.id, idx }))
-      .filter(x => idSet.has(x.id))
-      .map(x => x.idx);
-
+    
+    // 直接发送牌的ID，而不是索引
     socketService.emit('playCards', {
       roomId: room.id,
-      cardIndices
+      cardIds: selectedCardIds
     });
     setSelectedCardIds([]);
   };

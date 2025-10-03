@@ -8,6 +8,7 @@ module.exports = {
     path: path.resolve(__dirname, 'dist'),
     filename: 'bundle.js',
     clean: true,
+    publicPath: process.env.NODE_ENV === 'production' ? '/sdsj/' : '/',
   },
   module: {
     rules: [

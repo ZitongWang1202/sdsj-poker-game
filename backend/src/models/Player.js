@@ -16,7 +16,21 @@ class Player {
     this.cards = cards;
   }
 
-  // 出牌
+  // 出牌（根据牌ID）
+  playCardsByIds(cardIds) {
+    const playedCards = [];
+    
+    for (const cardId of cardIds) {
+      const cardIndex = this.cards.findIndex(card => card.id === cardId);
+      if (cardIndex !== -1) {
+        playedCards.push(this.cards.splice(cardIndex, 1)[0]);
+      }
+    }
+    
+    return playedCards;
+  }
+
+  // 出牌（根据索引，保留向后兼容性）
   playCards(cardIndices) {
     const playedCards = [];
     // 按照索引从大到小排序，避免删除时索引错位

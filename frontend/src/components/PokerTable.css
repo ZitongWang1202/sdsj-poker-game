@@ -35,7 +35,7 @@
   align-items: center;
 }
 
-.room-info, .phase-info, .trump-info, .level-info, .turn-info, .countdown-info {
+.room-info, .phase-info, .trump-info, .level-info, .turn-info, .countdown-info, .trump-player-info, .idle-score-info {
   background: rgba(255, 255, 255, 0.1);
   padding: 8px 16px;
   border-radius: 20px;
@@ -65,6 +65,12 @@
   border: 1px solid rgba(255, 215, 0, 0.3);
 }
 
+.idle-score-info {
+  background: rgba(34, 197, 94, 0.2);
+  border: 1px solid rgba(34, 197, 94, 0.3);
+  color: #10b981;
+}
+
 .leave-btn {
   background: rgba(220, 53, 69, 0.8);
   color: white;
@@ -83,15 +89,15 @@
 
 /* 游戏消息 */
 .game-message {
-  position: absolute;
-  top: 50%;
+  position: fixed;
+  bottom: 200px;
   left: 50%;
-  transform: translate(-50%, -50%);
+  transform: translateX(-50%);
   background: rgba(0, 0, 0, 0.8);
   color: white;
-  padding: 20px 40px;
+  padding: 15px 30px;
   border-radius: 15px;
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 500;
   z-index: 1000;
   backdrop-filter: blur(10px);
@@ -102,11 +108,11 @@
 @keyframes messageSlide {
   from {
     opacity: 0;
-    transform: translate(-50%, -60%);
+    transform: translateX(-50%) translateY(20px);
   }
   to {
     opacity: 1;
-    transform: translate(-50%, -50%);
+    transform: translateX(-50%) translateY(0);
   }
 }
 
@@ -135,11 +141,12 @@
 
 .played-cards {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  grid-template-rows: 1fr 1fr;
-  gap: 20px;
+  grid-template-columns: 1fr 1fr 1fr;
+  grid-template-rows: 1fr 1fr 1fr;
+  gap: 15px;
   width: 100%;
-  max-width: 400px;
+  max-width: 450px;
+  height: 300px;
 }
 
 .played-card-group {
@@ -150,23 +157,27 @@
 }
 
 .played-card-group.position-bottom {
-  grid-column: 1 / -1;
-  grid-row: 2;
+  grid-column: 2;
+  grid-row: 3;
+  align-self: end;
 }
 
 .played-card-group.position-left {
   grid-column: 1;
-  grid-row: 1;
+  grid-row: 2;
+  align-self: center;
 }
 
 .played-card-group.position-top {
-  grid-column: 1 / -1;
+  grid-column: 2;
   grid-row: 1;
+  align-self: start;
 }
 
 .played-card-group.position-right {
-  grid-column: 2;
-  grid-row: 1;
+  grid-column: 3;
+  grid-row: 2;
+  align-self: center;
 }
 
 .player-label {

@@ -95,34 +95,54 @@ class GameManager {
     const p2 = [];
     const p3 = [];
 
-    // 玩家0：一张王（大王）+ ♥7♥7
+    // 玩家0：一张大王 + ♥7♥7
     p0.push(...take(c => c.suit==='joker' && c.rank==='big', 1));
     p0.push(...take(c => c.suit==='hearts' && c.rank===7, 2));
 
-    // 玩家1：一对王（小王对）+ 任意一对8（优先♠8♠8）
+    // 玩家1：一对小王 + ♠8♠8
     p1.push(...take(c => c.suit==='joker' && c.rank==='small', 2));
-    const eightPair = take(c => c.suit==='spades' && c.rank===8, 2);
-    if (eightPair.length < 2) p1.push(...take(c => c.rank===8, 2 - eightPair.length));
-    else p1.push(...eightPair);
+    p1.push(...take(c => c.suit==='spades' && c.rank===8, 2));
 
-    // 玩家2：一张大王 + ♠J♠J + ♠Q♠Q（用于测试粘主）+ 级牌7和黑桃牌用于回馈 + 红桃牌
-    p2.push(...take(c => c.suit==='joker' && c.rank==='big', 1));
+    // 玩家2：剩余大王 + ♠J♠J + ♠Q♠Q（用于测试粘主）+ 其他测试牌
+    p2.push(...take(c => c.suit==='joker' && c.rank==='big', 1)); // 剩余的大王
     p2.push(...take(c => c.suit==='spades' && c.rank==='J', 2));
     p2.push(...take(c => c.suit==='spades' && c.rank==='Q', 2));
-    // 粘主回馈牌：1张级牌7 + 2张黑桃牌（按规则必须是联对同花色）
-    p2.push(...take(c => c.rank === 7, 1)); // 级牌7（任意花色）
-    p2.push(...take(c => c.suit==='spades' && c.rank !== 'J' && c.rank !== 'Q', 4)); // 4张其他黑桃牌（确保有足够选择）
-    // 额外添加红桃牌（如果需要）
-    p2.push(...take(c => c.suit==='hearts', 3)); // 3张红桃牌
+    // 粘主回馈牌：1张级牌7（非红桃，避免与玩家0冲突）+ 黑桃牌
+    p2.push(...take(c => c.rank === 7 && c.suit !== 'hearts', 1)); // 级牌7（非红桃）
+    p2.push(...take(c => c.suit==='spades' && c.rank !== 'J' && c.rank !== 'Q' && c.rank !== 7 && c.rank !== 8, 4)); // 4张其他黑桃牌
+    // 红桃牌
+    p2.push(...take(c => c.suit==='hearts' && c.rank !== 7, 3)); // 3张红桃牌（非7）
 
-    // 玩家3：一张小王 + ♥9♥9 + ♥10♥10（用于测试粘主）
-    p3.push(...take(c => c.suit==='joker' && c.rank==='small', 1));
+    // 玩家3：剩余小王 + ♥9♥9 + ♥10♥10（用于测试粘主）
+    p3.push(...take(c => c.suit==='joker' && c.rank==='small', 1)); // 剩余的小王
     p3.push(...take(c => c.suit==='hearts' && c.rank===9, 2));
     p3.push(...take(c => c.suit==='hearts' && c.rank===10, 2));
 
-    // 填满各自到26张
-    const fillTo = (arr, n) => { while (arr.length < n && deck.length) arr.push(deck.pop()); };
+    // 填满各自到26张，带重复检查
+    const fillTo = (arr, n) => { 
+      while (arr.length < n && deck.length) {
+        const card = deck.pop();
+        // 检查是否已经存在相同的牌（避免重复）
+        if (!arr.some(existingCard => existingCard.id === card.id)) {
+          arr.push(card);
+        }
+      }
+    };
     fillTo(p0, 26); fillTo(p1, 26); fillTo(p2, 26); fillTo(p3, 26);
+
+    // 调试：检查每个玩家的牌是否有重复
+    for (let i = 0; i < 4; i++) {
+      const playerCards = [p0, p1, p2, p3][i];
+      const cardIds = playerCards.map(c => c.id);
+      const uniqueIds = [...new Set(cardIds)];
+      if (cardIds.length !== uniqueIds.length) {
+        console.error(`❌ 玩家${i}的预设手牌有重复:`, cardIds.length, '张牌,', uniqueIds.length, '张唯一牌');
+        const duplicates = cardIds.filter((id, index) => cardIds.indexOf(id) !== index);
+        console.error('重复的牌ID:', duplicates);
+      } else {
+        console.log(`✅ 玩家${i}的预设手牌无重复:`, cardIds.length, '张牌');
+      }
+    }
 
     return [p0, p1, p2, p3];
   }

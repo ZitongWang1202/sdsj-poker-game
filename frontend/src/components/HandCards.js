@@ -30,13 +30,17 @@ const HandCards = ({
 
   const getCardStyle = (index, total) => {
     const baseOffset = 30; // 基础重叠偏移量
-    const maxWidth = 800; // 最大宽度
+    const maxWidth = 900; // 最大宽度
     const cardWidth = 80; // 单张卡牌宽度
     
     // 如果卡牌太多，动态调整重叠偏移
     let offset = baseOffset;
-    if (total > 15) {
-      offset = Math.max(15, maxWidth / total);
+    if (total > 26) {
+      // 30张牌的特殊情况，使用更紧密的间距
+      offset = Math.max(10, (maxWidth - cardWidth) / (total - 1));
+    } else if (total > 15) {
+      // 15-26张牌的情况
+      offset = Math.max(15, (maxWidth - cardWidth) / (total - 1));
     }
 
     const style = {

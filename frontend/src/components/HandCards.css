@@ -9,12 +9,13 @@
 /* 底部玩家手牌（自己） */
 .hand-cards-bottom {
   width: 100%;
-  max-width: 900px;
+  max-width: 1200px; /* 增加最大宽度以容纳更多牌 */
   margin: 0 auto;
   padding: 10px 0;
   display: flex;
   justify-content: center;
   position: relative;
+  min-height: 140px; /* 确保有足够高度显示选中状态 */
 }
 
 /* 顶部玩家手牌 */

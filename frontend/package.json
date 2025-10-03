@@ -6,7 +6,8 @@
   "scripts": {
     "start": "webpack serve --mode development --open",
     "build": "webpack --mode production",
-    "dev": "webpack serve --mode development"
+    "dev": "webpack serve --mode development",
+    "deploy": "npm run build && gh-pages -d dist"
   },
   "keywords": [
     "poker",
@@ -27,6 +28,7 @@
     "@babel/preset-react": "^7.22.0",
     "babel-loader": "^9.1.0",
     "css-loader": "^6.8.0",
+    "gh-pages": "^6.1.0",
     "html-webpack-plugin": "^5.5.0",
     "process": "^0.11.10",
     "style-loader": "^3.3.0",
