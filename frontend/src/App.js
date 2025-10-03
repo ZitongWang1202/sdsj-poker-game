@@ -18,7 +18,7 @@ function App() {
   }, []);
 
   return (
-    <Router basename="/sdsj-poker-game">
+    <Router basename={process.env.NODE_ENV === 'production' ? '/sdsj-poker-game' : '/'}>
       <div className="App">
         <Routes>
           <Route path="/" element={<GameLobby />} />
