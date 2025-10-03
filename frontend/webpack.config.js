@@ -1,5 +1,6 @@
 const path = require('path');
 const HtmlWebpackPlugin = require('html-webpack-plugin');
+const CopyWebpackPlugin = require('copy-webpack-plugin');
 const webpack = require('webpack');
 
 module.exports = {
@@ -57,6 +58,14 @@ module.exports = {
         'NODE_ENV': JSON.stringify(process.env.NODE_ENV || 'development'),
         'REACT_APP_SERVER_URL': JSON.stringify(process.env.REACT_APP_SERVER_URL || 'http://localhost:3001')
       }
+    }),
+    new CopyWebpackPlugin({
+      patterns: [
+        {
+          from: 'public/assets',
+          to: 'assets'
+        }
+      ]
     })
   ],
   optimization: {
