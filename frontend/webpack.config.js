@@ -57,23 +57,11 @@ module.exports = {
         'NODE_ENV': JSON.stringify(process.env.NODE_ENV || 'development'),
         'REACT_APP_SERVER_URL': JSON.stringify(process.env.REACT_APP_SERVER_URL || 'http://localhost:3001')
       }
-    }),
-    ...(process.env.NODE_ENV === 'production' ? [
-      new webpack.optimize.ModuleConcatenationPlugin()
-    ] : [])
+    })
   ],
   optimization: {
     minimize: process.env.NODE_ENV === 'production',
-    splitChunks: process.env.NODE_ENV === 'production' ? {
-      chunks: 'all',
-      cacheGroups: {
-        vendor: {
-          test: /[\\/]node_modules[\\/]/,
-          name: 'vendors',
-          chunks: 'all',
-        },
-      },
-    } : false
+    splitChunks: false
   },
   devServer: {
     static: {
