@@ -12,19 +12,19 @@ class SocketService {
   connect() {
     // 如果已经连接，直接返回
     if (this.socket && this.socket.connected) {
-      console.log('♻️ 复用现有连接');
+      if (process.env.NODE_ENV === 'development') console.log('♻️ 复用现有连接');
       return this.socket;
     }
 
     // 如果正在连接，直接返回当前socket实例
     if (this.isConnecting && this.socket) {
-      console.log('⏳ 连接进行中，返回当前实例...');
+      if (process.env.NODE_ENV === 'development') console.log('⏳ 连接进行中，返回当前实例...');
       return this.socket;
     }
 
     // 重置连接状态
     this.isConnecting = true;
-    console.log('🔗 创建新的Socket连接...');
+    if (process.env.NODE_ENV === 'development') console.log('🔗 创建新的Socket连接...');
 
     // 清理旧连接
     if (this.socket) {
@@ -33,40 +33,46 @@ class SocketService {
       this.socket = null;
     }
 
-    console.log('🔧 Socket.io配置:', {
-      serverUrl: this.serverUrl,
-      userAgent: navigator.userAgent.slice(0, 50)
-    });
+    if (process.env.NODE_ENV === 'development') {
+      console.log('🔧 Socket.io配置:', {
+        serverUrl: this.serverUrl,
+        userAgent: navigator.userAgent.slice(0, 50)
+      });
+    }
 
     this.socket = io(this.serverUrl, {
-      transports: ['polling'], // 先只用polling
+      transports: process.env.NODE_ENV === 'production' ? ['polling', 'websocket'] : ['polling'],
       timeout: 20000,
       autoConnect: true,
-      reconnection: false, // 暂时禁用自动重连
+      reconnection: process.env.NODE_ENV === 'production',
+      reconnectionAttempts: process.env.NODE_ENV === 'production' ? 5 : 0,
+      reconnectionDelay: 1000,
       forceNew: true
     });
 
-    console.log('📦 Socket实例已创建:', this.socket);
+    if (process.env.NODE_ENV === 'development') console.log('📦 Socket实例已创建:', this.socket);
 
     this.socket.on('connect', () => {
-      console.log('✅ Socket连接成功:', this.socket.id);
+      if (process.env.NODE_ENV === 'development') console.log('✅ Socket连接成功:', this.socket.id);
       this.isConnecting = false;
     });
 
     this.socket.on('disconnect', (reason) => {
-      console.log('❌ Socket断开连接:', reason);
+      if (process.env.NODE_ENV === 'development') console.log('❌ Socket断开连接:', reason);
       this.isConnecting = false;
     });
 
     this.socket.on('connect_error', (error) => {
       console.error('🔌 Socket连接错误:', error);
-      console.error('🔧 错误详情:', {
-        message: error.message,
-        description: error.description,
-        context: error.context,
-        type: error.type,
-        url: this.serverUrl
-      });
+      if (process.env.NODE_ENV === 'development') {
+        console.error('🔧 错误详情:', {
+          message: error.message,
+          description: error.description,
+          context: error.context,
+          type: error.type,
+          url: this.serverUrl
+        });
+      }
       this.isConnecting = false;
     });
 

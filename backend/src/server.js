@@ -144,9 +144,11 @@ function startDealingAnimation(io, roomId, gameManager) {
 
 // Socket.io连接处理
 io.on('connection', (socket) => {
-  console.log('✅ 新客户端连接成功:', socket.id);
-  console.log('🔗 连接来源:', socket.handshake.address);
-  console.log('🌐 User-Agent:', socket.handshake.headers['user-agent']?.slice(0, 50));
+  if (process.env.NODE_ENV === 'development') {
+    console.log('✅ 新客户端连接成功:', socket.id);
+    console.log('🔗 连接来源:', socket.handshake.address);
+    console.log('🌐 User-Agent:', socket.handshake.headers['user-agent']?.slice(0, 50));
+  }
 
   // 创建房间
   socket.on('createRoom', (playerName) => {
@@ -713,4 +715,5 @@ const PORT = process.env.PORT || 3001;
 server.listen(PORT, () => {
   console.log(`🚀 服务器运行在端口 ${PORT}`);
   console.log(`🎮 山东升级扑克游戏服务器已启动`);
+  console.log(`🌍 环境: ${process.env.NODE_ENV || 'development'}`);
 });
