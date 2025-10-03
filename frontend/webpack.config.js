@@ -6,7 +6,7 @@ module.exports = {
   entry: './src/index.js',
   output: {
     path: path.resolve(__dirname, 'dist'),
-    filename: process.env.NODE_ENV === 'production' ? 'bundle.[contenthash].js' : 'bundle.js',
+    filename: 'bundle.js',
     clean: true,
     publicPath: process.env.NODE_ENV === 'production' ? '/sdsj-poker-game/' : '/',
   },
@@ -30,7 +30,7 @@ module.exports = {
         test: /\.(png|svg|jpg|jpeg|gif)$/i,
         type: 'asset/resource',
         generator: {
-          filename: process.env.NODE_ENV === 'production' ? 'assets/[name].[contenthash][ext]' : 'assets/[name][ext]'
+          filename: 'assets/[path][name][ext]'
         }
       }
     ]
