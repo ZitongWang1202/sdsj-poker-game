@@ -6,23 +6,26 @@
  * @returns {string} SVG文件路径
  */
 export const getCardImagePath = (card) => {
+  // 获取基础路径，支持 GitHub Pages 子路径
+  const basePath = process.env.NODE_ENV === 'production' ? '/sdsj-poker-game' : '';
+  
   if (!card || !card.suit || !card.rank) {
-    return '/assets/cards/BACK.svg';
+    return `${basePath}/assets/cards/BACK.svg`;
   }
 
   // 处理卡牌背面
   if (card.suit === 'BACK' || card.rank === 'BACK') {
-    return '/assets/cards/BACK.svg';
+    return `${basePath}/assets/cards/BACK.svg`;
   }
 
   // 处理大小王
   if (card.suit === 'JOKER' || card.suit === 'joker') {
     // console.log('🃏 处理大小王:', { suit: card.suit, rank: card.rank });
     if (card.rank === 'BIG' || card.rank === 'big') {
-      return '/assets/cards/JOKER/BIG_JOKER.svg';
+      return `${basePath}/assets/cards/JOKER/BIG_JOKER.svg`;
     }
     if (card.rank === 'SMALL' || card.rank === 'small') {
-      return '/assets/cards/JOKER/SMALL_JOKER.svg';
+      return `${basePath}/assets/cards/JOKER/SMALL_JOKER.svg`;
     }
     // 如果都不匹配，记录错误信息
     // console.warn('⚠️ 大小王rank不匹配:', card.rank);
@@ -38,7 +41,7 @@ export const getCardImagePath = (card) => {
   if (rank === '12') rank = 'Q'; // Q牌  
   if (rank === '13') rank = 'K'; // K牌
 
-  return `/assets/cards/${suit}/${suit}_${rank}.svg`;
+  return `${basePath}/assets/cards/${suit}/${suit}_${rank}.svg`;
 };
 
 /**
@@ -46,7 +49,8 @@ export const getCardImagePath = (card) => {
  * @returns {string} 卡牌背面SVG路径
  */
 export const getCardBackPath = () => {
-  return '/assets/cards/BACK.svg';
+  const basePath = process.env.NODE_ENV === 'production' ? '/sdsj-poker-game' : '';
+  return `${basePath}/assets/cards/BACK.svg`;
 };
 
 /**
