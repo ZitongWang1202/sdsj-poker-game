@@ -495,7 +495,8 @@ io.on('connection', (socket) => {
         playerName: playerInfo.player.name,
         playerId: playerInfo.player.position,
         cards: result.cards,
-        gameState: room.game.getGameState()
+        gameState: room.game.getGameState(),
+        message: result.message
       });
       
       // 更新玩家手牌

@@ -240,7 +240,12 @@ const PokerTable = () => {
 
       socketService.on('cardsPlayed', (data) => {
         console.log('🎮 收到出牌事件:', data);
-        setGameMessage(`🃏 ${data.playerName} 出牌`);
+        // 如果有特殊消息（如甩牌失败），显示特殊消息，否则显示普通出牌消息
+        if (data.message && data.message.includes('甩牌被否定')) {
+          setGameMessage(`❌ ${data.playerName} ${data.message}`);
+        } else {
+          setGameMessage(`🃏 ${data.playerName} 出牌`);
+        }
         setGameState(data.gameState);
         // 更新桌面显示的牌
         setPlayedCards(prev => {

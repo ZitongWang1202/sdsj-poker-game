@@ -1164,18 +1164,22 @@ class ShandongUpgradeGame {
     // 检查是否需要强制出牌
     let finalCardsToPlay = cardsToPlay;
     let finalCardType = validation.cardType;
+    let playedCards;
     
     if (validation.forcedCards) {
-      // 强制出牌：需要从玩家手牌中找到对应的牌
-      finalCardsToPlay = this.findCardsInHand(player, validation.forcedCards);
-      if (!finalCardsToPlay) {
-        return { success: false, message: '无法找到强制出牌的牌' };
-      }
-      finalCardType = validation.forcedCardType;
+      // 强制出牌：系统自动选择最小单位，不需要玩家重新选择
+      finalCardsToPlay = validation.forcedCards;
+      finalCardType = validation.cardType; // validation.cardType已经是forcedCardType
+      
+      console.log('🎯 甩牌被否定，强制出牌:', finalCardsToPlay.map(c => `${c.suit}_${c.rank}`));
+      
+      // 从玩家手牌中移除强制出牌的牌（而不是玩家原来选的所有牌）
+      const forcedCardIds = finalCardsToPlay.map(card => card.id);
+      playedCards = player.playCardsByIds(forcedCardIds);
+    } else {
+      // 正常出牌：从玩家手牌中移除选中的牌
+      playedCards = player.playCardsByIds(cardIds);
     }
-
-    // 从玩家手牌中移除选中的牌
-    const playedCards = player.playCardsByIds(cardIds);
     
     this.roundCards.push({
       playerId,
@@ -1198,7 +1202,8 @@ class ShandongUpgradeGame {
           cards: playedCards,
           cardType: validation.cardType,
           nextPlayer: this.currentTurn,
-          finalResult: finalResult
+          finalResult: finalResult,
+          message: validation.message
         };
       }
     }
@@ -1207,7 +1212,8 @@ class ShandongUpgradeGame {
       success: true, 
       cards: playedCards,
       cardType: validation.cardType,
-      nextPlayer: this.currentTurn 
+      nextPlayer: this.currentTurn,
+      message: validation.message
     };
   }
 
@@ -2398,7 +2404,19 @@ class ShandongUpgradeGame {
       return maxValue1Fallback > maxValue2Fallback;
     }
 
-    // 非混合场景：保持原有最大牌比较
+    // 非混合场景
+    // 如果是顺子（雨），需要检查对子数是否相同
+    if (card1.cardType.type === 'straight') {
+      const pairCount1 = this.countPairsInStraight(card1.cards);
+      const pairCount2 = this.countPairsInStraight(card2.cards);
+      
+      // 对子数必须相同才能比较
+      if (pairCount1 !== pairCount2) {
+        return false; // 对子数不同，card1不更大
+      }
+    }
+    
+    // 比较最大牌值
     const maxValue1 = Math.max(...card1.cards.map(card => 
       CardTypeValidator.getCardValue(card, this.currentLevel, this.trumpSuit)
     ));
@@ -2427,7 +2445,19 @@ class ShandongUpgradeGame {
       return type1Priority > type2Priority;
     }
 
-    // 相同牌型，比较最大牌的大小
+    // 相同牌型
+    // 如果是顺子（雨），需要检查对子数是否相同
+    if (card1.cardType.type === 'straight') {
+      const pairCount1 = this.countPairsInStraight(card1.cards);
+      const pairCount2 = this.countPairsInStraight(card2.cards);
+      
+      // 对子数必须相同才能比较
+      if (pairCount1 !== pairCount2) {
+        return false; // 对子数不同，card1不更大
+      }
+    }
+    
+    // 比较最大牌的大小
     const maxValue1 = Math.max(...card1.cards.map(card => 
       CardTypeValidator.getCardValue(card, this.currentLevel, this.trumpSuit)
     ));
@@ -2789,30 +2819,317 @@ class ShandongUpgradeGame {
 
   // 判定首家甩牌是否会被否定，如果被否定则返回强制出牌
   judgeLeadMixedAndForce(cardsToPlay, playerId) {
-    // 分析甩牌中的各类单位
-    const units = this.analyzeMixedCards(cardsToPlay, this.currentLevel, this.trumpSuit);
+    console.log('🔍 开始检查甩牌是否会被否定:', {
+      playerId,
+      cardsCount: cardsToPlay.length,
+      cards: cardsToPlay.map(c => `${c.suit}_${c.rank}`)
+    });
+    
+    // 步骤1: 先按花色分组，优先检测顺子（雨优先级最高）
+    const { straights, usedCardIds } = this.detectStraightsFromAllCards(cardsToPlay);
+    console.log('🔍 检测到的顺子:', straights.length, '组');
+    
+    // 步骤2: 从剩余牌中分析基础单位
+    const remainingCards = cardsToPlay.filter(card => !usedCardIds.has(card.id));
+    console.log('🔍 雨之后剩余牌数:', remainingCards.length, '张');
+    
+    const analysis = this.analyzeMixedCards(remainingCards, this.currentLevel, this.trumpSuit);
+    console.log('🔍 分析结果:', {
+      singles: analysis.singles.length,
+      pairs: analysis.pairs.length
+    });
+    
+    // 步骤3: 检测连对（从剩余牌的对子中）
+    const consecutivePairs = this.detectConsecutivePairs(analysis.pairs);
+    console.log('🔍 检测到的连对:', consecutivePairs.length, '组');
+    
+    // 标记已在连对中使用的对子
+    const usedInConsecutive = new Set();
+    if (consecutivePairs && consecutivePairs.length > 0) {
+      consecutivePairs.forEach(consecutive => {
+        for (let i = 0; i < consecutive.length; i += 2) {
+          const pair = [consecutive[i], consecutive[i + 1]];
+          for (let j = 0; j < analysis.pairs.length; j++) {
+            if (this.isSamePair(analysis.pairs[j], pair)) {
+              usedInConsecutive.add(j);
+              break;
+            }
+          }
+        }
+      });
+    }
+    
+    // 过滤出未使用的独立对子
+    const finalPairs = analysis.pairs.filter((_, index) => !usedInConsecutive.has(index));
+    console.log('🔍 最终独立对子:', finalPairs.length, '对');
+    
+    // 步骤4: 检测闪/震单位（从原始所有牌中）
+    const flashesAndThunders = this.detectFlashesAndThunders(cardsToPlay);
+    console.log('🔍 检测到的闪/震:', flashesAndThunders.length, '组');
+    
+    // 标记已在闪/震中使用的单张
+    const usedInFlashThunder = new Set();
+    flashesAndThunders.forEach(flashThunder => {
+      flashThunder.forEach(card => {
+        const index = analysis.singles.findIndex(s => s.id === card.id);
+        if (index !== -1) usedInFlashThunder.add(index);
+      });
+    });
+    
+    // 过滤出最终剩余的独立单张
+    const finalSingles = analysis.singles.filter((_, index) => !usedInFlashThunder.has(index));
+    console.log('🔍 最终独立单张:', finalSingles.length, '张');
+    
+    // 转换为统一格式
+    const units = {
+      singles: finalSingles.map(card => [card]), // 单张转换为单张数组
+      pairs: finalPairs,
+      consecutivePairs: consecutivePairs,
+      straights: straights,
+      thunders: flashesAndThunders.filter(ft => ft.length > 4), // >4张为震
+      flashes: flashesAndThunders.filter(ft => ft.length === 4) // 4张为闪
+    };
+    
+    console.log('🔍 单位分析完成:', {
+      singles: units.singles.length,
+      pairs: units.pairs.length,
+      consecutivePairs: units.consecutivePairs.length,
+      straights: units.straights.length,
+      flashes: units.flashes.length,
+      thunders: units.thunders.length
+    });
     
     // 按优先级检查各类单位是否会被否定
-    const priorityOrder = ['thunder', 'flash', 'straight', 'consecutivePairs', 'pair', 'single'];
+    const priorityOrder = ['thunders', 'flashes', 'straights', 'consecutivePairs', 'pairs', 'singles'];
     
     for (const unitType of priorityOrder) {
       if (units[unitType] && units[unitType].length > 0) {
+        console.log(`🔍 检查 ${unitType}:`, units[unitType].length, '个单位');
+        
         // 找到该类单位中的最小单位
         const minUnit = this.findMinUnit(units[unitType], unitType);
+        console.log(`🔍 最小单位 (${unitType}):`, minUnit ? minUnit.map(c => `${c.suit}_${c.rank}`) : 'null');
+        
         if (minUnit && this.canBeBeatenByOthers(minUnit, unitType, playerId)) {
           // 该类单位被否定，返回强制出该最小单位
+          console.log(`❌ ${unitType} 被否定，强制出最小单位`);
           const forcedCardType = CardTypeValidator.identifyCardType(minUnit, this.currentLevel, this.trumpSuit);
           return {
             shouldForce: true,
             forcedCards: minUnit,
             forcedCardType: forcedCardType
           };
+        } else if (minUnit) {
+          console.log(`✅ ${unitType} 不会被否定`);
         }
       }
     }
     
     // 甩牌成功，不需要强制
+    console.log('✅ 甩牌成功，所有单位都不会被否定');
     return { shouldForce: false };
+  }
+
+  // 检查两个对子是否相同
+  isSamePair(pair1, pair2) {
+    if (pair1.length !== 2 || pair2.length !== 2) return false;
+    
+    // 检查两张牌的suit和rank是否相同
+    return (pair1[0].suit === pair2[0].suit && pair1[0].rank === pair2[0].rank &&
+            pair1[1].suit === pair2[1].suit && pair1[1].rank === pair2[1].rank) ||
+           (pair1[0].suit === pair2[1].suit && pair1[0].rank === pair2[1].rank &&
+            pair1[1].suit === pair2[0].suit && pair1[1].rank === pair2[0].rank);
+  }
+
+  // 检测连对（从对子数组中提取实际的连对单位）
+  detectConsecutivePairs(pairs) {
+    if (!pairs || pairs.length < 2) {
+      console.log('🔍 对子数量不足，无法形成连对');
+      return [];
+    }
+    
+    const consecutivePairs = [];
+    const used = new Set();
+    
+    // 按牌值排序所有对子
+    const sortedPairs = pairs.map((pair, index) => ({
+      pair: pair,
+      value: CardTypeValidator.getSequentialValue(pair[0], this.currentLevel, this.trumpSuit),
+      originalIndex: index
+    })).sort((a, b) => a.value - b.value);
+    
+    console.log('🔍 排序后的对子:', sortedPairs.map(p => ({
+      pair: p.pair.map(c => `${c.suit}_${c.rank}`),
+      value: p.value
+    })));
+    
+    // 查找连续的对子
+    for (let i = 0; i < sortedPairs.length - 1; i++) {
+      if (used.has(i)) continue;
+      
+      const currentPair = sortedPairs[i];
+      const nextPair = sortedPairs[i + 1];
+      
+      console.log(`🔍 检查对子 ${i} 和 ${i+1}:`, {
+        current: currentPair.pair.map(c => `${c.suit}_${c.rank}`),
+        currentValue: currentPair.value,
+        next: nextPair.pair.map(c => `${c.suit}_${c.rank}`),
+        nextValue: nextPair.value,
+        difference: nextPair.value - currentPair.value
+      });
+      
+      // 检查是否是相邻的对子（差值为1）
+      if (nextPair.value === currentPair.value + 1) {
+        console.log('✅ 找到连对！');
+        // 将两对合并为一个连对单位（4张牌）
+        const consecutiveGroup = [...currentPair.pair, ...nextPair.pair];
+        consecutivePairs.push(consecutiveGroup);
+        used.add(i);
+        used.add(i + 1);
+        i++; // 跳过下一个，避免重复检测
+      }
+    }
+    
+    console.log('🔍 最终检测到', consecutivePairs.length, '组连对');
+    return consecutivePairs;
+  }
+
+  // 检测顺子（从所有牌中按花色分组检测，雨可以包含对子）
+  detectStraightsFromAllCards(cards) {
+    if (!cards || cards.length < 5) {
+      console.log('🔍 牌数不足5张，无法形成顺子');
+      return { straights: [], usedCardIds: new Set() };
+    }
+    
+    const straights = [];
+    const usedCardIds = new Set();
+    
+    // 按花色分组所有牌
+    const bySuit = {};
+    cards.forEach((card) => {
+      if (!bySuit[card.suit]) bySuit[card.suit] = [];
+      bySuit[card.suit].push(card);
+    });
+    
+    console.log('🔍 按花色分组（检测雨）:', Object.keys(bySuit).map(suit => `${suit}:${bySuit[suit].length}张`));
+    
+    // 对每个花色检测顺子（可能有多个不相交的连续区间）
+    for (const [suit, suitCards] of Object.entries(bySuit)) {
+      if (suitCards.length < 5) {
+        console.log(`  ⏭️ ${suit}牌数不足5张，跳过`);
+        continue;
+      }
+      
+      console.log(`🔍 检测${suit}的顺子（雨）, 共${suitCards.length}张`);
+      
+      // 按点数分组，找出所有不同的点数
+      const rankSet = new Set(suitCards.map(c => c.rank));
+      const ranks = Array.from(rankSet);
+      
+      // 按索引排序
+      const order = [2, 3, 4, 5, 6, 7, 8, 9, 10, 'J', 'Q', 'K', 'A'];
+      const toIdx = (r) => order.indexOf(r);
+      const sortedRanks = ranks.map(r => ({ rank: r, idx: toIdx(r) }))
+                                .filter(r => r.idx >= 0)
+                                .sort((a, b) => a.idx - b.idx);
+      
+      console.log(`  🔍 ${suit}的不同点数:`, sortedRanks.map(r => r.rank));
+      
+      // 查找连续的点数区间（至少5个）
+      let currentGroup = [sortedRanks[0]];
+      
+      for (let i = 1; i < sortedRanks.length; i++) {
+        if (sortedRanks[i].idx === currentGroup[currentGroup.length - 1].idx + 1) {
+          // 连续，加入当前组
+          currentGroup.push(sortedRanks[i]);
+        } else {
+          // 不连续，检查当前组是否足够形成雨
+          if (currentGroup.length >= 5) {
+            const ranksInGroup = new Set(currentGroup.map(r => r.rank));
+            const cardsInGroup = suitCards.filter(c => ranksInGroup.has(c.rank));
+            
+            // 验证这组牌是否是有效的雨
+            const validation = CardTypeValidator.identifyStraight(cardsInGroup, this.currentLevel, this.trumpSuit);
+            if (validation.valid) {
+              console.log(`  ✅ 找到雨！${suit} ${cardsInGroup.length}张:`, cardsInGroup.map(c => c.rank));
+              straights.push(cardsInGroup);
+              cardsInGroup.forEach(card => usedCardIds.add(card.id));
+            }
+          }
+          
+          // 开始新的组
+          currentGroup = [sortedRanks[i]];
+        }
+      }
+      
+      // 检查最后一组
+      if (currentGroup.length >= 5) {
+        const ranksInGroup = new Set(currentGroup.map(r => r.rank));
+        const cardsInGroup = suitCards.filter(c => ranksInGroup.has(c.rank));
+        
+        const validation = CardTypeValidator.identifyStraight(cardsInGroup, this.currentLevel, this.trumpSuit);
+        if (validation.valid) {
+          console.log(`  ✅ 找到雨！${suit} ${cardsInGroup.length}张:`, cardsInGroup.map(c => c.rank));
+          straights.push(cardsInGroup);
+          cardsInGroup.forEach(card => usedCardIds.add(card.id));
+        }
+      }
+    }
+    
+    console.log('🔍 最终检测到', straights.length, '组雨');
+    return { straights, usedCardIds };
+  }
+
+  // 检测闪/震（从所有牌中提取实际的闪/震单位）
+  detectFlashesAndThunders(cards) {
+    const flashesAndThunders = [];
+    
+    // 只检查主牌
+    const trumpCards = cards.filter(c => CardTypeValidator.isCardTrump(c, this.currentLevel, this.trumpSuit));
+    if (trumpCards.length < 4) {
+      console.log('🔍 主牌数量不足4张，无法形成闪/震');
+      return [];
+    }
+    
+    // 按点数分组
+    const byRank = {};
+    trumpCards.forEach((card, index) => {
+      const rankKey = String(card.rank);
+      if (!byRank[rankKey]) byRank[rankKey] = [];
+      byRank[rankKey].push({ card, index });
+    });
+    
+    // 检查每个点数是否有4张或更多（且来自不同花色）
+    for (const [rank, rankCards] of Object.entries(byRank)) {
+      if (rankCards.length >= 4) {
+        // 检查是否来自不同花色
+        const suits = new Set(rankCards.map(rc => rc.card.suit));
+        
+        // 只有级牌和常主（2,3,5）才能形成闪/震
+        const isLevelCard = String(rank) === String(this.currentLevel);
+        const isPermanentTrump = ['2', '3', '5'].includes(rank);
+        
+        if (!isLevelCard && !isPermanentTrump) {
+          console.log(`  ❌ ${rank}不是级牌或常主，不能形成闪/震`);
+          continue;
+        }
+        
+        if (suits.size === 4) {
+          // 4种不同花色，形成闪或震
+          const flashThunderCards = rankCards.slice(0, rankCards.length).map(rc => rc.card);
+          console.log('✅ 找到闪/震！', flashThunderCards.map(c => `${c.suit}_${c.rank}`));
+          
+          // 验证是否是有效的闪/震
+          const validation = CardTypeValidator.identifyFlash(flashThunderCards, this.currentLevel, this.trumpSuit);
+          if (validation.valid) {
+            flashesAndThunders.push(flashThunderCards);
+          }
+        }
+      }
+    }
+    
+    console.log('🔍 最终检测到', flashesAndThunders.length, '组闪/震');
+    return flashesAndThunders;
   }
 
   // 找到同类单位中的最小单位
@@ -2820,8 +3137,8 @@ class ShandongUpgradeGame {
     if (!units || units.length === 0) return null;
     
     switch (unitType) {
-      case 'thunder':
-      case 'flash':
+      case 'thunders':
+      case 'flashes':
         // 闪/震：按张数最少，张数相同时按最大牌值最小
         return units.reduce((min, unit) => {
           if (unit.length < min.length) return unit;
@@ -2833,7 +3150,7 @@ class ShandongUpgradeGame {
           return min;
         });
         
-      case 'straight':
+      case 'straights':
         // 顺子：按长度最短，长度相同时按最大牌值最小
         return units.reduce((min, unit) => {
           if (unit.length < min.length) return unit;
@@ -2859,7 +3176,7 @@ class ShandongUpgradeGame {
           return min;
         });
         
-      case 'pair':
+      case 'pairs':
         // 对子：按牌值最小
         return units.reduce((min, unit) => {
           const value1 = CardTypeValidator.getCardValue(unit[0], this.currentLevel, this.trumpSuit);
@@ -2867,7 +3184,7 @@ class ShandongUpgradeGame {
           return value1 < value2 ? unit : min;
         });
         
-      case 'single':
+      case 'singles':
         // 单张：按牌值最小
         return units.reduce((min, unit) => {
           const value1 = CardTypeValidator.getCardValue(unit[0], this.currentLevel, this.trumpSuit);
@@ -2898,21 +3215,23 @@ class ShandongUpgradeGame {
   canPlayerBeatUnit(player, unit, unitType) {
     const playerCards = player.cards;
     
+    console.log(`🔍 检查玩家${player.name}是否能压过 ${unitType}:`, unit.map(c => `${c.suit}_${c.rank}`));
+    
     switch (unitType) {
-      case 'thunder':
-      case 'flash':
+      case 'thunders':
+      case 'flashes':
         return this.canBeatThunderOrFlash(playerCards, unit);
         
-      case 'straight':
+      case 'straights':
         return this.canBeatStraight(playerCards, unit);
         
       case 'consecutivePairs':
         return this.canBeatConsecutivePairs(playerCards, unit);
         
-      case 'pair':
+      case 'pairs':
         return this.canBeatPair(playerCards, unit);
         
-      case 'single':
+      case 'singles':
         return this.canBeatSingle(playerCards, unit);
         
       default:
@@ -2924,18 +3243,20 @@ class ShandongUpgradeGame {
   canBeatThunderOrFlash(playerCards, unit) {
     const unitLength = unit.length;
     const unitMaxValue = Math.max(...unit.map(card => CardTypeValidator.getCardValue(card, this.currentLevel, this.trumpSuit)));
+    console.log(`  🔍 闪/震: ${unitLength}张, 最大牌值: ${unitMaxValue}`);
     
-    // 检查玩家是否有更长的闪/震
-    const playerThunderFlash = this.findThunderOrFlash(playerCards, unitLength + 1);
-    if (playerThunderFlash) return true;
-    
-    // 检查玩家是否有相同长度但更大的闪/震
+    // 闪/震必须相同张数才能比较，检查玩家是否有相同长度但更大的闪/震
     const playerSameLength = this.findThunderOrFlash(playerCards, unitLength);
     if (playerSameLength) {
       const playerMaxValue = Math.max(...playerSameLength.map(card => CardTypeValidator.getCardValue(card, this.currentLevel, this.trumpSuit)));
-      return playerMaxValue > unitMaxValue;
+      console.log(`  🔍 找到相同长度的闪/震，最大牌值: ${playerMaxValue}`);
+      if (playerMaxValue > unitMaxValue) {
+        console.log(`  ✅ 更大的闪/震 (${playerMaxValue} > ${unitMaxValue})`);
+        return true;
+      }
     }
     
+    console.log(`  ❌ 没有更大的闪/震`);
     return false;
   }
 
@@ -2943,18 +3264,38 @@ class ShandongUpgradeGame {
   canBeatStraight(playerCards, unit) {
     const unitLength = unit.length;
     const unitMaxValue = Math.max(...unit.map(card => CardTypeValidator.getCardValue(card, this.currentLevel, this.trumpSuit)));
+    const unitIsTrump = CardTypeValidator.isCardTrump(unit[0], this.currentLevel, this.trumpSuit);
     
-    // 检查玩家是否有更长的顺子
-    const playerStraight = this.findStraight(playerCards, unitLength + 1);
-    if (playerStraight) return true;
+    // 计算单位中的对子数
+    const unitPairCount = this.countPairsInStraight(unit);
+    console.log(`  🔍 顺子: ${unitLength}张, 最大牌值: ${unitMaxValue}, 主牌: ${unitIsTrump}, 对子数: ${unitPairCount}`);
     
-    // 检查玩家是否有相同长度但更大的顺子
+    // 顺子必须相同张数才能比较，检查玩家是否有相同长度但更大的顺子
     const playerSameLength = this.findStraight(playerCards, unitLength);
     if (playerSameLength) {
-      const playerMaxValue = Math.max(...playerSameLength.map(card => CardTypeValidator.getCardValue(card, this.currentLevel, this.trumpSuit)));
-      return playerMaxValue > unitMaxValue;
+      // 检查是否同为主牌或同为副牌
+      const playerIsTrump = CardTypeValidator.isCardTrump(playerSameLength[0], this.currentLevel, this.trumpSuit);
+      if (playerIsTrump !== unitIsTrump) {
+        console.log(`  ⚠️ 主副牌类型不同，不能压过 (player:${playerIsTrump}, unit:${unitIsTrump})`);
+      } else {
+        // 检查对子数是否相同
+        const playerPairCount = this.countPairsInStraight(playerSameLength);
+        console.log(`  🔍 找到相同长度的顺子，对子数: ${playerPairCount}`);
+        
+        if (playerPairCount !== unitPairCount) {
+          console.log(`  ⚠️ 对子数不同，不能压过 (player:${playerPairCount}, unit:${unitPairCount})`);
+        } else {
+          const playerMaxValue = Math.max(...playerSameLength.map(card => CardTypeValidator.getCardValue(card, this.currentLevel, this.trumpSuit)));
+          console.log(`  🔍 最大牌值: ${playerMaxValue}`);
+          if (playerMaxValue > unitMaxValue) {
+            console.log(`  ✅ 更大的顺子 (${playerMaxValue} > ${unitMaxValue})`);
+            return true;
+          }
+        }
+      }
     }
     
+    console.log(`  ❌ 没有更大的顺子`);
     return false;
   }
 
@@ -2962,95 +3303,204 @@ class ShandongUpgradeGame {
   canBeatConsecutivePairs(playerCards, unit) {
     const unitPairCount = unit.length / 2;
     const unitMaxValue = Math.max(...unit.map(card => CardTypeValidator.getCardValue(card, this.currentLevel, this.trumpSuit)));
+    const unitIsTrump = CardTypeValidator.isCardTrump(unit[0], this.currentLevel, this.trumpSuit);
+    console.log(`  🔍 连对: ${unitPairCount}对, 最大牌值: ${unitMaxValue}, 主牌: ${unitIsTrump}`);
     
-    // 检查玩家是否有更多对数的连对
-    const playerConsecutivePairs = this.findConsecutivePairs(playerCards, unitPairCount + 1);
-    if (playerConsecutivePairs) return true;
-    
-    // 检查玩家是否有相同对数但更大的连对
+    // 连对必须相同对数才能比较，检查玩家是否有相同对数但更大的连对
     const playerSameCount = this.findConsecutivePairs(playerCards, unitPairCount);
     if (playerSameCount) {
-      const playerMaxValue = Math.max(...playerSameCount.map(card => CardTypeValidator.getCardValue(card, this.currentLevel, this.trumpSuit)));
-      return playerMaxValue > unitMaxValue;
+      // 检查是否同为主牌或同为副牌
+      const playerIsTrump = CardTypeValidator.isCardTrump(playerSameCount[0], this.currentLevel, this.trumpSuit);
+      if (playerIsTrump !== unitIsTrump) {
+        console.log(`  ⚠️ 主副牌类型不同，不能压过 (player:${playerIsTrump}, unit:${unitIsTrump})`);
+      } else {
+        const playerMaxValue = Math.max(...playerSameCount.map(card => CardTypeValidator.getCardValue(card, this.currentLevel, this.trumpSuit)));
+        console.log(`  🔍 找到相同对数的连对，最大牌值: ${playerMaxValue}`);
+        if (playerMaxValue > unitMaxValue) {
+          console.log(`  ✅ 更大的连对 (${playerMaxValue} > ${unitMaxValue})`);
+          return true;
+        }
+      }
     }
     
+    console.log(`  ❌ 没有更大的连对`);
     return false;
   }
 
   // 检查是否能压过对子
   canBeatPair(playerCards, unit) {
     const unitValue = CardTypeValidator.getCardValue(unit[0], this.currentLevel, this.trumpSuit);
+    const unitIsTrump = CardTypeValidator.isCardTrump(unit[0], this.currentLevel, this.trumpSuit);
+    console.log(`  🔍 对子牌值: ${unitValue} (${unit[0].suit}_${unit[0].rank}), 主牌: ${unitIsTrump}`);
     
     // 检查玩家是否有更大的对子
     const playerPairs = this.findPairs(playerCards);
+    console.log(`  🔍 玩家有${playerPairs.length}个对子`);
+    
     for (const pair of playerPairs) {
+      const pairIsTrump = CardTypeValidator.isCardTrump(pair[0], this.currentLevel, this.trumpSuit);
+      
+      // 只有相同类型（都是主或都是副）才能比较
+      if (pairIsTrump !== unitIsTrump) {
+        continue;
+      }
+      
       const pairValue = CardTypeValidator.getCardValue(pair[0], this.currentLevel, this.trumpSuit);
-      if (pairValue > unitValue) return true;
+      console.log(`  🔍 检查对子: ${pair[0].suit}_${pair[0].rank}, 牌值: ${pairValue}, 主牌: ${pairIsTrump}`);
+      if (pairValue > unitValue) {
+        console.log(`  ✅ 找到更大的对子: ${pair[0].suit}_${pair[0].rank} (${pairValue} > ${unitValue})`);
+        return true;
+      }
     }
     
+    console.log(`  ❌ 没有更大的对子`);
     return false;
   }
 
   // 检查是否能压过单张
   canBeatSingle(playerCards, unit) {
     const unitValue = CardTypeValidator.getCardValue(unit[0], this.currentLevel, this.trumpSuit);
+    const unitIsTrump = CardTypeValidator.isCardTrump(unit[0], this.currentLevel, this.trumpSuit);
+    console.log(`  🔍 单张牌值: ${unitValue} (${unit[0].suit}_${unit[0].rank}), 主牌: ${unitIsTrump}`);
     
     // 检查玩家是否有更大的单张
     for (const card of playerCards) {
+      const cardIsTrump = CardTypeValidator.isCardTrump(card, this.currentLevel, this.trumpSuit);
+      
+      // 只有相同类型（都是主或都是副）才能比较
+      if (cardIsTrump !== unitIsTrump) {
+        continue;
+      }
+      
       const cardValue = CardTypeValidator.getCardValue(card, this.currentLevel, this.trumpSuit);
-      if (cardValue > unitValue) return true;
+      if (cardValue > unitValue) {
+        console.log(`  ✅ 找到更大的单张: ${card.suit}_${card.rank} (${cardValue} > ${unitValue})`);
+        return true;
+      }
     }
     
+    console.log(`  ❌ 没有更大的单张`);
     return false;
   }
 
-  // 辅助函数：查找闪/震
+  // 辅助函数：查找闪/震（优化版，按点数分组检测）
   findThunderOrFlash(playerCards, minLength) {
-    // 尝试所有可能的闪/震组合
-    for (let length = minLength; length <= playerCards.length; length++) {
-      const combinations = this.getCombinations(playerCards, length);
-      for (const combo of combinations) {
-        const thunderResult = CardTypeValidator.identifyThunder(combo, this.currentLevel, this.trumpSuit);
-        if (thunderResult.valid) {
-          return combo;
-        }
-        const flashResult = CardTypeValidator.identifyFlash(combo, this.currentLevel, this.trumpSuit);
-        if (flashResult.valid) {
-          return combo;
+    // 只检查主牌
+    const trumpCards = playerCards.filter(c => CardTypeValidator.isCardTrump(c, this.currentLevel, this.trumpSuit));
+    if (trumpCards.length < minLength) {
+      return null;
+    }
+    
+    // 按点数分组
+    const byRank = {};
+    trumpCards.forEach(card => {
+      const rankKey = String(card.rank);
+      if (!byRank[rankKey]) byRank[rankKey] = [];
+      byRank[rankKey].push(card);
+    });
+    
+    // 查找符合条件的点数（级牌或常主2/3/5）
+    for (const [rank, rankCards] of Object.entries(byRank)) {
+      if (rankCards.length < minLength) continue;
+      
+      const isLevelCard = String(rank) === String(this.currentLevel);
+      const isPermanentTrump = ['2', '3', '5'].includes(rank);
+      
+      if (!isLevelCard && !isPermanentTrump) continue;
+      
+      // 检查是否有4种不同花色
+      const suits = new Set(rankCards.map(c => c.suit));
+      if (suits.size === 4) {
+        // 取需要的长度
+        const cards = rankCards.slice(0, minLength);
+        const validation = CardTypeValidator.identifyFlash(cards, this.currentLevel, this.trumpSuit);
+        if (validation.valid) {
+          return cards;
         }
       }
     }
+    
     return null;
   }
 
-  // 辅助函数：查找顺子
+  // 辅助函数：查找顺子（优化版，按花色分组检测）
   findStraight(playerCards, minLength) {
-    // 尝试所有可能的顺子组合
-    for (let length = minLength; length <= playerCards.length; length++) {
-      const combinations = this.getCombinations(playerCards, length);
-      for (const combo of combinations) {
-        const straightResult = CardTypeValidator.identifyStraight(combo, this.currentLevel, this.trumpSuit);
-        if (straightResult.valid) {
-          return combo;
-        }
+    // 按花色分组
+    const bySuit = {};
+    playerCards.forEach(card => {
+      if (!bySuit[card.suit]) bySuit[card.suit] = [];
+      bySuit[card.suit].push(card);
+    });
+    
+    // 对每个花色检测是否有足够长的连续牌
+    for (const [suit, suitCards] of Object.entries(bySuit)) {
+      if (suitCards.length < minLength) continue;
+      
+      // 检查整体是否能形成顺子
+      const validation = CardTypeValidator.identifyStraight(suitCards, this.currentLevel, this.trumpSuit);
+      if (validation.valid && suitCards.length >= minLength) {
+        return suitCards;
       }
     }
+    
     return null;
   }
 
-  // 辅助函数：查找连对
+  // 辅助函数：查找连对（优化版，不使用暴力组合）
   findConsecutivePairs(playerCards, minPairCount) {
-    // 尝试所有可能的连对组合
-    for (let pairCount = minPairCount; pairCount <= Math.floor(playerCards.length / 2); pairCount++) {
-      const combinations = this.getCombinations(playerCards, pairCount * 2);
-      for (const combo of combinations) {
-        const consecutivePairsResult = CardTypeValidator.identifyConsecutivePairs(combo, this.currentLevel, this.trumpSuit);
-        if (consecutivePairsResult.valid) {
-          return combo;
+    // 先找出所有对子
+    const pairs = this.findPairs(playerCards);
+    if (pairs.length < minPairCount) {
+      return null; // 对子数量不够
+    }
+    
+    // 按牌值排序对子
+    const sortedPairs = pairs.map(pair => ({
+      pair: pair,
+      value: CardTypeValidator.getSequentialValue(pair[0], this.currentLevel, this.trumpSuit)
+    })).sort((a, b) => a.value - b.value);
+    
+    // 查找最长的连续对子序列
+    for (let startIdx = 0; startIdx < sortedPairs.length; startIdx++) {
+      let consecutiveGroup = [sortedPairs[startIdx]];
+      
+      for (let i = startIdx + 1; i < sortedPairs.length; i++) {
+        const lastValue = consecutiveGroup[consecutiveGroup.length - 1].value;
+        const currentValue = sortedPairs[i].value;
+        
+        if (currentValue === lastValue + 1) {
+          consecutiveGroup.push(sortedPairs[i]);
+        } else if (currentValue !== lastValue) {
+          break; // 不连续了
         }
       }
+      
+      // 如果找到足够长的连对
+      if (consecutiveGroup.length >= minPairCount) {
+        const consecutiveCards = consecutiveGroup.flatMap(p => p.pair);
+        return consecutiveCards;
+      }
     }
+    
     return null;
+  }
+
+  // 辅助函数：计算顺子中的对子数
+  countPairsInStraight(cards) {
+    // 按点数分组
+    const rankCount = {};
+    cards.forEach(card => {
+      const rankKey = String(card.rank);
+      rankCount[rankKey] = (rankCount[rankKey] || 0) + 1;
+    });
+    
+    // 计算对子数（每2张相同点数算1对）
+    let pairCount = 0;
+    for (const count of Object.values(rankCount)) {
+      pairCount += Math.floor(count / 2);
+    }
+    
+    return pairCount;
   }
 
   // 辅助函数：生成指定长度的所有组合
