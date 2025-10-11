@@ -1096,6 +1096,107 @@ const PokerTable = () => {
     }
   };
 
+  // 判断当前玩家是否是闲家
+  const isIdlePlayer = () => {
+    if (!gameState || gameState.trumpPlayer === null || gameState.trumpPlayer === undefined) {
+      return false;
+    }
+    
+    // 庄家队伍：亮主玩家 % 2
+    const trumpTeam = gameState.trumpPlayer % 2;
+    // 闲家队伍：1 - trumpTeam
+    const idleTeam = 1 - trumpTeam;
+    
+    // 当前玩家所在队伍：myPosition % 2
+    const myTeam = myPosition % 2;
+    
+    // 如果我的队伍和闲家队伍相同，则我是闲家
+    return myTeam === idleTeam;
+  };
+
+  // 获取当前回合显示文本
+  const getCurrentTurnText = () => {
+    if (!gameState) return null;
+    
+    // 亮主阶段：所有玩家都可以操作
+    if ((gameState.gamePhase === 'dealing' || gameState.gamePhase === 'bidding') && 
+        (gameState.trumpPlayer === null || gameState.trumpPlayer === undefined)) {
+      return '你可以操作';
+    }
+    
+    // 反主阶段：除了亮主的玩家，其他玩家可以操作
+    if ((gameState.gamePhase === 'dealing' || gameState.gamePhase === 'bidding' || gameState.gamePhase === 'countering') &&
+        (gameState.trumpPlayer !== null && gameState.trumpPlayer !== undefined) &&
+        (gameState.counterTrumpPlayer === null || gameState.counterTrumpPlayer === undefined)) {
+      // 如果我是亮主者，显示"等待其他玩家反主"
+      if (myPosition === gameState.firstTrumpPlayer) {
+        return '等待其他玩家反主';
+      }
+      return '你可以操作';
+    }
+    
+    // 粘主阶段：除了叫主者或反主者，其他玩家可以操作
+    if (gameState.gamePhase === 'sticking') {
+      const forbiddenPlayer = gameState.counterTrumpPlayer !== null ? gameState.counterTrumpPlayer : gameState.firstTrumpPlayer;
+      if (myPosition === forbiddenPlayer) {
+        return '等待其他玩家粘主';
+      }
+      return '你可以操作';
+    }
+    
+    // 摸底阶段：显示摸底玩家
+    if (gameState.gamePhase === 'bottom') {
+      if (gameState.bottomPlayer !== null && gameState.bottomPlayer !== undefined) {
+        return `玩家${gameState.bottomPlayer + 1}${gameState.bottomPlayer === myPosition ? '（你）' : ''}`;
+      }
+    }
+    
+    // 出牌阶段：显示当前回合玩家
+    if (gameState.gamePhase === 'playing') {
+      if (gameState.currentTurn !== undefined) {
+        return `玩家${gameState.currentTurn + 1}${gameState.currentTurn === myPosition ? '（你）' : ''}`;
+      }
+    }
+    
+    return null;
+  };
+
+  // 判断某个玩家是否应该显示🎯图标（可以操作）
+  const shouldShowTurnIndicator = (playerIndex) => {
+    if (!gameState || playerIndex === undefined) return false;
+    
+    // 亮主阶段：所有玩家都显示🎯
+    if ((gameState.gamePhase === 'dealing' || gameState.gamePhase === 'bidding') && 
+        (gameState.trumpPlayer === null || gameState.trumpPlayer === undefined)) {
+      return true;
+    }
+    
+    // 反主阶段：除了亮主者，其他玩家显示🎯
+    if ((gameState.gamePhase === 'dealing' || gameState.gamePhase === 'bidding' || gameState.gamePhase === 'countering') &&
+        (gameState.trumpPlayer !== null && gameState.trumpPlayer !== undefined) &&
+        (gameState.counterTrumpPlayer === null || gameState.counterTrumpPlayer === undefined)) {
+      return playerIndex !== gameState.firstTrumpPlayer;
+    }
+    
+    // 粘主阶段：除了叫主者/反主者，其他玩家显示🎯
+    if (gameState.gamePhase === 'sticking') {
+      const forbiddenPlayer = gameState.counterTrumpPlayer !== null ? gameState.counterTrumpPlayer : gameState.firstTrumpPlayer;
+      return playerIndex !== forbiddenPlayer;
+    }
+    
+    // 摸底阶段：只有摸底玩家显示🎯
+    if (gameState.gamePhase === 'bottom') {
+      return gameState.bottomPlayer === playerIndex;
+    }
+    
+    // 出牌阶段：只有当前回合玩家显示🎯
+    if (gameState.gamePhase === 'playing') {
+      return gameState.currentTurn === playerIndex;
+    }
+    
+    return false;
+  };
+
 
   return (
     <div className="poker-table">
@@ -1125,11 +1226,11 @@ const PokerTable = () => {
                   {gameState.trumpRank && ` (${gameState.trumpRank})`}
                 </span>
               )}
-              {gameState?.idleScore !== undefined && (
-                <span className="idle-score-info">
-                  💰 闲家得分: {gameState.idleScore}
-                </span>
-              )}
+               {gameState?.idleScore !== undefined && (
+                 <span className="idle-score-info">
+                   💰 闲家得分{isIdlePlayer() ? '（你）' : ''}: {gameState.idleScore}
+                 </span>
+               )}
               {trumpCountdown !== null && gameState?.gamePhase === 'bidding' && (
                 <span className="countdown-info">
                   ⏰ 亮主倒计时: {trumpCountdown}秒
@@ -1145,11 +1246,11 @@ const PokerTable = () => {
                   📌 粘主倒计时: {stickCountdown}秒
                 </span>
               )}
-              {gameState?.currentTurn !== undefined && (
-                <span className="turn-info">
-                  当前回合: 玩家{gameState.currentTurn + 1}
-                </span>
-              )}
+               {getCurrentTurnText() && (
+                 <span className="turn-info">
+                   当前回合: {getCurrentTurnText()}
+                 </span>
+               )}
             </div>
             <button onClick={() => navigate('/')} className="leave-btn">
               离开游戏
@@ -1210,14 +1311,14 @@ const PokerTable = () => {
               id: `back-${playerIndex}-${i}`
             }));
 
-            return (
-              <div key={player.socketId} className={`other-player-hand ${position}`}>
-                <div className="player-info">
-                  <span className="player-name">{player.name}</span>
-                  {gameState?.currentTurn === playerIndex && (
-                    <span className="current-turn-indicator">🎯</span>
-                  )}
-                </div>
+             return (
+               <div key={player.socketId} className={`other-player-hand ${position}`}>
+                 <div className="player-info">
+                   <span className="player-name">{player.name}</span>
+                   {shouldShowTurnIndicator(playerIndex) && (
+                     <span className="current-turn-indicator">🎯</span>
+                   )}
+                 </div>
                 <HandCards
                   cards={cardBacks}
                   selectedCards={[]}
