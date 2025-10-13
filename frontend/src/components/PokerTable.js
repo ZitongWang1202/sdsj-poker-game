@@ -25,6 +25,8 @@ const PokerTable = () => {
   const [selectedExchangeCards, setSelectedExchangeCards] = useState([]); // 选中的交换牌
   const [waitingNext, setWaitingNext] = useState(false); // 是否在等待下一局
   const [nextReadyCount, setNextReadyCount] = useState(0); // 已就绪人数
+  const [waitingInitialReady, setWaitingInitialReady] = useState(false); // 是否在等待初始准备
+  const [initialReadyCount, setInitialReadyCount] = useState(0); // 初始准备已就绪人数
 
   // 监听游戏状态变化，重新计算粘主选项
   useEffect(() => {
@@ -92,6 +94,19 @@ const PokerTable = () => {
       }, 'PokerTable');
 
 
+      // 处理游戏开始事件（可能包含等待准备的标记）
+      socketService.on('gameStarted', (data) => {
+        console.log('🎮 PokerTable收到游戏开始事件:', data);
+        
+        // 检查是否需要等待初始准备
+        if (data.waitingInitialReady) {
+          console.log('⏳ 需要等待玩家准备');
+          setWaitingInitialReady(true);
+          setInitialReadyCount(0);
+          setGameMessage(data.message || '⏳ 等待所有玩家准备开始游戏');
+        }
+      }, 'PokerTable');
+
       // 处理发牌开始事件
       socketService.on('dealingStarted', (data) => {
         console.log('🎴 发牌开始:', data);
@@ -99,6 +114,8 @@ const PokerTable = () => {
         setGameMessage('🎴 发牌开始，可以开始选择亮主牌');
         setWaitingNext(false);
         setNextReadyCount(0);
+        setWaitingInitialReady(false);  // 清除初始准备状态
+        setInitialReadyCount(0);
       }, 'PokerTable');
 
       // 处理逐张发牌动画
@@ -291,10 +308,36 @@ const PokerTable = () => {
         setSelectedCardIds([]);
       }, 'PokerTable');
 
-      // 进入“等待下一局”阶段
+      // 进入"等待初始准备"阶段
+      socketService.on('waitingInitialReady', (data) => {
+        console.log('⏳ 等待初始准备:', data);
+        setGameMessage(data.message || '⏳ 等待所有玩家准备开始游戏');
+        setInitialReadyCount(0);
+        setWaitingInitialReady(true);
+      }, 'PokerTable');
+
+      // 初始准备就绪进度
+      socketService.on('initialGameReadyProgress', ({ count }) => {
+        setInitialReadyCount(count || 0);
+      }, 'PokerTable');
+
+      // 被拒绝开始初始游戏（人数不足或错误）
+      socketService.on('startInitialGameRejected', ({ reason }) => {
+        setGameMessage(`⚠️ 无法开始游戏：${reason}`);
+      }, 'PokerTable');
+
+      // 游戏真正开始（准备完毕后）
+      socketService.on('gameReallyStarted', (data) => {
+        console.log('🎮 游戏真正开始:', data);
+        setGameMessage(data.message || '🎮 游戏开始！');
+        setWaitingInitialReady(false);
+        setInitialReadyCount(0);
+      }, 'PokerTable');
+
+      // 进入"等待下一局"阶段
       socketService.on('readyForNextGame', (data) => {
         console.log('⏸ 等待下一局，就绪请求:', data);
-        setGameMessage('⏸ 本局结束，等待所有玩家点击“开始下一局”');
+        setGameMessage('⏸ 本局结束，等待所有玩家点击"开始下一局"');
         setNextReadyCount(0);
         setWaitingNext(true);
       }, 'PokerTable');
@@ -1510,6 +1553,28 @@ const PokerTable = () => {
                 (gameState?.gamePhase === 'playing' && gameState?.currentTurn === myPosition)
               }
             />
+
+      {waitingInitialReady && (
+        <div className="next-game-panel" style={{marginTop: '12px'}}>
+          <button
+            className="action-btn"
+            onClick={() => {
+              socketService.emit('readyInitial', { roomId });
+            }}
+            style={{ marginRight: 8 }}
+          >
+            我已准备好
+          </button>
+          <button
+            className="action-btn"
+            onClick={() => {
+              socketService.emit('startInitialGame', { roomId });
+            }}
+          >
+            开始游戏 ({initialReadyCount}/4)
+          </button>
+        </div>
+      )}
 
       {waitingNext && (
         <div className="next-game-panel" style={{marginTop: '12px'}}>

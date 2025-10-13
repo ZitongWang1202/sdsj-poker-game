@@ -203,63 +203,29 @@ io.on('connection', (socket) => {
         console.warn('发送加入快照失败:', e);
       }
 
-      // 如果房间人满，开始游戏
+      // 如果房间人满，等待玩家准备
       if (result.room.players.length === 4) {
-        // 测试房间则用固定发牌
-        if (result.room.isTestRoom) {
-          const presets = gameManager.generateTestPresets();
-          gameManager.startGame(roomId, true, presets);
-        } else {
-          gameManager.startGame(roomId);
-        }
-        
-        // 设置粘主阶段进入回调
         const room = gameManager.getRoom(roomId);
-        if (room && room.game) {
-          room.game._onStickPhaseEntered = () => {
-            io.to(roomId).emit('stickingStarted', {
-              stickEndTime: room.game.getGameState().stickEndTime,
-              gameState: room.game.getGameState()
-            });
-          };
-          
-          // 设置摸底阶段进入回调
-          room.game._onBottomPhaseEntered = () => {
-            const gameState = room.game.getGameState();
-            const bottomPlayer = room.players[gameState.bottomPlayer];
-            
-            // 广播摸底阶段开始
-            io.to(roomId).emit('bottomPhaseStarted', {
-              bottomPlayer: gameState.bottomPlayer,
-              bottomPlayerName: bottomPlayer?.name,
-              gameState: gameState
-            });
-            
-            // 更新摸底玩家的手牌（因为添加了4张底牌）
-            if (bottomPlayer) {
-              const playerSocket = io.sockets.sockets.get(bottomPlayer.socketId);
-              if (playerSocket) {
-                playerSocket.emit('handUpdated', {
-                  cards: bottomPlayer.cards,
-                  gameState: gameState
-                });
-              }
-            }
-          };
-        }
         
-        // 通知游戏开始
+        // 初始化准备系统
+        room.initialGameReady = new Set();
+        room.isWaitingInitialReady = true;
+        
+        // 通知所有玩家：房间人满，等待准备（在 gameStarted 中携带准备信息）
         io.to(roomId).emit('gameStarted', {
-          message: '🎮 游戏开始！正在发牌...',
-          room: result.room.getStatus()
+          message: '🎮 房间已满！',
+          room: result.room.getStatus(),
+          waitingInitialReady: true  // 标记需要等待准备
         });
         
-        // 开始逐张发牌动画
+        // 延迟发送 waitingInitialReady，确保 PokerTable 已经挂载
         setTimeout(() => {
-          startDealingAnimation(io, roomId, gameManager);
-        }, 2000); // 延长到2秒，确保前端准备好
+          io.to(roomId).emit('waitingInitialReady', {
+            message: '等待所有玩家点击"准备"按钮开始游戏'
+          });
+        }, 2000);
         
-        console.log(`房间 ${roomId} 游戏开始，已发牌`);
+        console.log(`房间 ${roomId} 人满，等待玩家准备`);
       }
     } else {
       socket.emit('joinError', result.message);
@@ -606,6 +572,21 @@ io.on('connection', (socket) => {
     }
   });
 
+  // 客户端：初始准备（第一次开始游戏）
+  socket.on('readyInitial', (data) => {
+    const { roomId } = data || {};
+    const playerInfo = gameManager.getPlayerInfo(socket.id);
+    if (!playerInfo) return;
+    const room = gameManager.getRoom(roomId);
+    if (!room) return;
+    if (!room.initialGameReady) room.initialGameReady = new Set();
+    room.initialGameReady.add(playerInfo.player.position);
+    // 广播当前就绪人数
+    const count = room.initialGameReady.size;
+    io.to(roomId).emit('initialGameReadyProgress', { count });
+    console.log(`玩家 ${playerInfo.player.name} 已准备，当前 ${count}/4`);
+  });
+
   // 客户端：我已准备好开始下一局
   socket.on('readyNext', (data) => {
     const { roomId } = data || {};
@@ -618,6 +599,80 @@ io.on('connection', (socket) => {
     // 广播当前就绪人数
     const count = room.nextGameReady.size;
     io.to(roomId).emit('nextGameReadyProgress', { count });
+  });
+
+  // 客户端：发起开始初始游戏（需要4人都ready）
+  socket.on('startInitialGame', (data) => {
+    const { roomId } = data || {};
+    const room = gameManager.getRoom(roomId);
+    if (!room) return;
+    // 需要4人全部就绪
+    if (!room.initialGameReady || room.initialGameReady.size < 4) {
+      io.to(roomId).emit('startInitialGameRejected', { reason: '需要四名玩家全部就绪' });
+      return;
+    }
+    try {
+      // 测试房间则用固定发牌
+      if (room.isTestRoom) {
+        const presets = gameManager.generateTestPresets();
+        gameManager.startGame(roomId, true, presets);
+      } else {
+        gameManager.startGame(roomId);
+      }
+      
+      // 设置粘主阶段进入回调
+      if (room && room.game) {
+        room.game._onStickPhaseEntered = () => {
+          io.to(roomId).emit('stickingStarted', {
+            stickEndTime: room.game.getGameState().stickEndTime,
+            gameState: room.game.getGameState()
+          });
+        };
+        
+        // 设置摸底阶段进入回调
+        room.game._onBottomPhaseEntered = () => {
+          const gameState = room.game.getGameState();
+          const bottomPlayer = room.players[gameState.bottomPlayer];
+          
+          // 广播摸底阶段开始
+          io.to(roomId).emit('bottomPhaseStarted', {
+            bottomPlayer: gameState.bottomPlayer,
+            bottomPlayerName: bottomPlayer?.name,
+            gameState: gameState
+          });
+          
+          // 更新摸底玩家的手牌（因为添加了4张底牌）
+          if (bottomPlayer) {
+            const playerSocket = io.sockets.sockets.get(bottomPlayer.socketId);
+            if (playerSocket) {
+              playerSocket.emit('handUpdated', {
+                cards: bottomPlayer.cards,
+                gameState: gameState
+              });
+            }
+          }
+        };
+      }
+      
+      // 清空准备标记
+      room.initialGameReady = new Set();
+      room.isWaitingInitialReady = false;
+      
+      // 通知游戏真正开始
+      io.to(roomId).emit('gameReallyStarted', {
+        message: '🎮 游戏开始！正在发牌...'
+      });
+      
+      // 开始逐张发牌动画
+      setTimeout(() => {
+        startDealingAnimation(io, roomId, gameManager);
+      }, 1000);
+      
+      console.log(`房间 ${roomId} 游戏开始，已发牌`);
+    } catch (e) {
+      console.error('startInitialGame 失败:', e);
+      io.to(roomId).emit('startInitialGameRejected', { reason: '服务器内部错误' });
+    }
   });
 
   // 客户端：发起开始下一局（需要4人都ready）

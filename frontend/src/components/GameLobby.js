@@ -12,6 +12,7 @@ const GameLobby = () => {
   const [connectionStatus, setConnectionStatus] = useState('disconnected');
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(false);
+  const [createdRoomId, setCreatedRoomId] = useState(null);
 
   useEffect(() => {
     console.log('🎮 GameLobby组件开始连接Socket服务器');
@@ -37,11 +38,11 @@ const GameLobby = () => {
             readyState: socket?.io?.readyState
           });
           
-          // 如果已连接但UI状态未更新，手动更新
+          // 如果已连接但UI状态未更新，手动更新（只在初始连接时更新消息）
           if (socket?.connected && connectionStatus !== 'connected') {
             console.log('🔄 手动更新连接状态');
             setConnectionStatus('connected');
-            setMessage('✅ 已连接到服务器');
+            setMessage(prev => !prev || prev === '🔄 正在连接服务器...' ? '✅ 已连接到服务器' : prev);
             setLoading(false);
           }
         }, 3000);
@@ -59,7 +60,8 @@ const GameLobby = () => {
     socketService.on('connect', () => {
       console.log('🟢 GameLobby收到connect事件，更新UI状态');
       setConnectionStatus('connected');
-      setMessage('✅ 已连接到服务器');
+      // 只在初始连接或重连时更新消息，不覆盖已有的重要消息
+      setMessage(prev => !prev || prev.includes('连接') || prev.includes('断开') ? '✅ 已连接到服务器' : prev);
       setLoading(false);
       // 获取房间列表
       socketService.getRooms();
@@ -80,12 +82,14 @@ const GameLobby = () => {
     // 监听房间相关事件
     socketService.on('roomCreated', (room) => {
       setCurrentRoom(room);
+      setCreatedRoomId(room.id);
       setMessage(`🎉 房间创建成功！房间ID: ${room.id}`);
       setLoading(false);
     }, 'GameLobby');
 
     socketService.on('joinedRoom', (room) => {
       setCurrentRoom(room);
+      setCreatedRoomId(null); // 加入房间时不显示复制按钮
       setMessage(`✅ 成功加入房间: ${room.id}`);
       setLoading(false);
     }, 'GameLobby');
@@ -159,6 +163,7 @@ const GameLobby = () => {
       return;
     }
     setLoading(true);
+    setCreatedRoomId(null);
     setMessage('🔄 正在创建房间...');
     socketService.createRoom(playerName.trim());
   };
@@ -173,6 +178,7 @@ const GameLobby = () => {
       return;
     }
     setLoading(true);
+    setCreatedRoomId(null);
     setMessage('🔄 正在创建测试房间...');
     socketService.createTestRoom(playerName.trim());
   };
@@ -195,6 +201,7 @@ const GameLobby = () => {
     }
     
     setLoading(true);
+    setCreatedRoomId(null);
     setMessage('🔄 正在加入房间...');
     socketService.joinRoom(targetId, playerName.trim());
   };
@@ -217,6 +224,7 @@ const GameLobby = () => {
       
       // 重置状态
       setCurrentRoom(null);
+      setCreatedRoomId(null);
       setMessage('✅ 已离开房间');
       
       // 刷新房间列表
@@ -225,6 +233,17 @@ const GameLobby = () => {
           socketService.getRooms();
         }
       }, 500);
+    }
+  };
+
+  const handleCopyRoomId = () => {
+    if (createdRoomId) {
+      navigator.clipboard.writeText(createdRoomId).then(() => {
+        setMessage(`✅ 房间ID已复制: ${createdRoomId}`);
+      }).catch(err => {
+        console.error('复制失败:', err);
+        setMessage('❌ 复制失败，请手动复制');
+      });
     }
   };
 
@@ -249,7 +268,7 @@ const GameLobby = () => {
   return (
     <div className="game-lobby">
       <div className="lobby-header">
-        <h1>🃏 山东升级扑克游戏</h1>
+        <h1>山东升级</h1>
         <div className={`connection-status ${getConnectionStatusClass()}`}>
           {loading && <span className="loading"></span>}
           连接状态: {getConnectionStatusText()}
@@ -258,7 +277,15 @@ const GameLobby = () => {
 
       {message && (
         <div className="message-box">
-          {message}
+          <span>{message}</span>
+          {createdRoomId && (
+            <button 
+              className="btn btn-success btn-small copy-room-btn"
+              onClick={handleCopyRoomId}
+            >
+              📋
+            </button>
+          )}
         </div>
       )}
 
