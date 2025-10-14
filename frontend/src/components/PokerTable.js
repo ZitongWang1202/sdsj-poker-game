@@ -29,6 +29,7 @@ const PokerTable = () => {
   const [initialReadyCount, setInitialReadyCount] = useState(0); // 初始准备已就绪人数
   const [isInitialReady, setIsInitialReady] = useState(false); // 我是否已初始准备
   const [isNextReady, setIsNextReady] = useState(false); // 我是否已准备下一局
+  const [idleScoreAnimating, setIdleScoreAnimating] = useState(false); // 闲家得分动画状态
 
   // 监听游戏状态变化，重新计算粘主选项
   useEffect(() => {
@@ -39,6 +40,17 @@ const PokerTable = () => {
       setStickOptions(options);
     }
   }, [gameState?.gamePhase, myCards, myPosition]);
+
+  // 监听闲家得分变化，触发动画
+  useEffect(() => {
+    if (gameState?.idleScore !== undefined && gameState.idleScore > 0) {
+      setIdleScoreAnimating(true);
+      const timer = setTimeout(() => {
+        setIdleScoreAnimating(false);
+      }, 600); // 动画持续时间
+      return () => clearTimeout(timer);
+    }
+  }, [gameState?.idleScore]);
 
 
   useEffect(() => {
@@ -1344,7 +1356,7 @@ const PokerTable = () => {
                 );
               })()}
                {gameState?.idleScore !== undefined && (
-                 <span className="idle-score-info">
+                 <span className={`idle-score-info ${idleScoreAnimating ? 'score-pulse' : ''}`}>
                    💰 闲家得分{isIdlePlayer() ? '（你）' : ''}: {gameState.idleScore}
                  </span>
                )}
@@ -1460,7 +1472,7 @@ const PokerTable = () => {
                     <button
                       key={index}
                       onClick={() => handleStickTrump(option)}
-                      className="btn btn-primary"
+                      className="action-btn"
                     >
                       {option.displayName}
                     </button>
