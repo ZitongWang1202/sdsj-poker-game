@@ -1143,17 +1143,25 @@ class ShandongUpgradeGame {
     }
 
     // 根据ID查找要出的牌
-    const cardsToPlay = [];
-    const cardIndicesToRemove = [];
+    const cardsWithIndices = [];
     
     for (const cardId of cardIds) {
       const cardIndex = player.cards.findIndex(card => card.id === cardId);
       if (cardIndex === -1) {
         return { success: false, message: `牌不存在: ${cardId}` };
       }
-      cardsToPlay.push(player.cards[cardIndex]);
-      cardIndicesToRemove.push(cardIndex);
+      cardsWithIndices.push({
+        card: player.cards[cardIndex],
+        index: cardIndex
+      });
     }
+    
+    // 按照手牌中的顺序排序（保持手牌的排列顺序）
+    cardsWithIndices.sort((a, b) => a.index - b.index);
+    
+    // 提取排序后的牌和索引
+    const cardsToPlay = cardsWithIndices.map(item => item.card);
+    const cardIndicesToRemove = cardsWithIndices.map(item => item.index);
 
     // 验证出牌合法性
     const validation = this.validatePlayCards(playerId, cardsToPlay);
@@ -1166,6 +1174,9 @@ class ShandongUpgradeGame {
     let finalCardType = validation.cardType;
     let playedCards;
     
+    // 获取排序后的牌ID
+    const sortedCardIds = cardsToPlay.map(card => card.id);
+    
     if (validation.forcedCards) {
       // 强制出牌：系统自动选择最小单位，不需要玩家重新选择
       finalCardsToPlay = validation.forcedCards;
@@ -1177,8 +1188,8 @@ class ShandongUpgradeGame {
       const forcedCardIds = finalCardsToPlay.map(card => card.id);
       playedCards = player.playCardsByIds(forcedCardIds);
     } else {
-      // 正常出牌：从玩家手牌中移除选中的牌
-      playedCards = player.playCardsByIds(cardIds);
+      // 正常出牌：从玩家手牌中移除选中的牌（使用排序后的ID顺序）
+      playedCards = player.playCardsByIds(sortedCardIds);
     }
     
     this.roundCards.push({

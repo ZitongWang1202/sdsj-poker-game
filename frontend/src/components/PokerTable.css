@@ -90,29 +90,32 @@
 /* 游戏消息 */
 .game-message {
   position: fixed;
-  bottom: 200px;
+  top: calc(50vh - 20px);
   left: 50%;
-  transform: translateX(-50%);
-  background: rgba(0, 0, 0, 0.8);
+  transform: translate(-50%, -50%);
+  background: rgba(0, 0, 0, 0.3);
   color: white;
-  padding: 15px 30px;
-  border-radius: 15px;
-  font-size: 16px;
+  padding: 10px 20px;
+  border-radius: 12px;
+  font-size: 15px;
   font-weight: 500;
-  z-index: 1000;
-  backdrop-filter: blur(10px);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  animation: messageSlide 0.3s ease-out;
+  z-index: 15;
+  backdrop-filter: blur(5px);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  animation: messageFade 0.3s ease-out;
+  max-width: 80%;
+  text-align: center;
+  pointer-events: none;
 }
 
-@keyframes messageSlide {
+@keyframes messageFade {
   from {
     opacity: 0;
-    transform: translateX(-50%) translateY(20px);
+    transform: translate(-50%, -50%) scale(0.95);
   }
   to {
     opacity: 1;
-    transform: translateX(-50%) translateY(0);
+    transform: translate(-50%, -50%) scale(1);
   }
 }
 
@@ -122,15 +125,15 @@
 /* 中央出牌区域 */
 .center-area {
   position: absolute;
-  top: 50%;
+  top: 220px;
+  bottom: 260px;
   left: 50%;
-  transform: translate(-50%, -50%);
-  min-width: 300px;
-  min-height: 200px;
+  transform: translateX(-50%);
+  width: 1200px;
   background: rgba(0, 100, 0, 0.1);
   border: 2px dashed rgba(255, 255, 255, 0.3);
-  border-radius: 15px;
-  padding: 20px;
+  border-radius: 30px;
+  padding: 30px 70px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -143,10 +146,11 @@
   display: grid;
   grid-template-columns: 1fr 1fr 1fr;
   grid-template-rows: 1fr 1fr 1fr;
-  gap: 15px;
+  gap: 20px;
   width: 100%;
-  max-width: 450px;
-  height: 300px;
+  max-width: 800px;
+  height: 100%;
+  max-height: 450px;
 }
 
 .played-card-group {
@@ -246,10 +250,12 @@
   left: 50%;
   transform: translateX(-50%);
   width: 100%;
-  max-width: 1200px;
+  max-width: 1400px;
   background: rgba(0, 0, 0, 0.4);
-  padding: 15px 20px;
+  padding: 20px 30px;
   border-top: 1px solid rgba(255, 255, 255, 0.1);
+  border-top-left-radius: 20px;
+  border-top-right-radius: 20px;
   backdrop-filter: blur(10px);
   box-sizing: border-box;
   display: flex;
@@ -257,8 +263,67 @@
   align-items: center;
 }
 
+/* 准备按钮面板 - 在屏幕下方 */
+.ready-panel {
+  position: fixed;
+  bottom: 30px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+}
+
+/* 准备面板中的按钮样式 */
+.ready-panel .action-btn {
+  padding: 12px 24px;
+  border: none;
+  border-radius: 25px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s;
+  font-size: 15px;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+}
+
+/* 准备按钮 - 蓝色 */
+.ready-panel .action-btn:not(.ready-btn):first-child {
+  background: linear-gradient(135deg, #2196F3 0%, #42A5F5 100%);
+  color: white;
+}
+
+.ready-panel .action-btn:not(.ready-btn):first-child:hover {
+  transform: scale(1.05);
+  box-shadow: 0 5px 15px rgba(33, 150, 243, 0.4);
+}
+
+/* 取消准备按钮 - 黄色 */
+.ready-panel .ready-btn {
+  background: linear-gradient(135deg, #ffd700 0%, #ffed4e 100%) !important;
+  color: #000 !important;
+  box-shadow: 0 4px 10px rgba(255, 215, 0, 0.3) !important;
+}
+
+.ready-panel .ready-btn:hover {
+  transform: scale(1.05);
+  box-shadow: 0 5px 15px rgba(255, 215, 0, 0.5) !important;
+}
+
+/* 开始游戏按钮 - 白色 */
+.ready-panel .action-btn:last-child {
+  background: linear-gradient(135deg, #f5f5f5 0%, #ffffff 100%);
+  color: #000;
+}
+
+.ready-panel .action-btn:last-child:hover {
+  transform: scale(1.05);
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+}
+
 .hand-controls {
-  margin-bottom: 15px;
+  margin-bottom: 18px;
   text-align: center;
 }
 
@@ -284,6 +349,17 @@
   cursor: pointer;
   transition: all 0.3s;
   font-size: 14px;
+}
+
+.ready-btn {
+  background: rgba(255, 193, 7, 0.8) !important;
+  color: #000 !important;
+  box-shadow: 0 0 15px rgba(255, 193, 7, 0.5);
+}
+
+.ready-btn:hover {
+  background: rgba(255, 193, 7, 1) !important;
+  transform: scale(1.05);
 }
 
 .trump-btn {
@@ -417,28 +493,34 @@
   word-break: break-all;
 }
 
-/* 等待状态 */
-.waiting-cards {
-  position: absolute;
-  bottom: 50%;
-  left: 50%;
-  transform: translate(-50%, 50%);
-  text-align: center;
-  color: #ffd700;
-  font-size: 18px;
-  font-weight: 500;
-}
 
 /* 响应式设计 */
 @media (max-width: 1200px) {
   .center-area {
-    width: 300px;
-    height: 200px;
+    top: 200px;
+    bottom: 240px;
+    width: 900px;
+    padding: 25px 50px;
   }
   
+  .played-cards {
+    max-width: 600px;
+    gap: 15px;
+  }
+  
+  .game-message {
+    top: calc(50vh - 20px);
+    font-size: 14px;
+    padding: 8px 16px;
+  }
   
   .my-hand-area {
-    padding: 12px 15px;
+    padding: 18px 20px;
+    max-width: 1200px;
+  }
+  
+  .ready-panel {
+    bottom: 25px;
   }
   
   .my-hand {
@@ -465,13 +547,36 @@
   }
   
   .center-area {
-    width: 200px;
-    height: 120px;
+    top: 150px;
+    bottom: 200px;
+    width: 90%;
+    min-width: 350px;
+    padding: 20px 30px;
+  }
+  
+  .played-cards {
+    max-width: 400px;
+    gap: 10px;
+  }
+  
+  .game-message {
+    top: calc(50vh - 25px);
+    font-size: 13px;
+    padding: 6px 12px;
   }
   
   .my-hand-area {
-    padding: 8px 10px;
+    padding: 12px 15px;
     max-width: 100%;
+  }
+  
+  .ready-panel {
+    bottom: 20px;
+  }
+  
+  .ready-panel .action-btn {
+    padding: 10px 18px;
+    font-size: 14px;
   }
   
   .hand-card {

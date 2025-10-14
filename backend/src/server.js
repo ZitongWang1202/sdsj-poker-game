@@ -581,10 +581,27 @@ io.on('connection', (socket) => {
     if (!room) return;
     if (!room.initialGameReady) room.initialGameReady = new Set();
     room.initialGameReady.add(playerInfo.player.position);
-    // 广播当前就绪人数
+    // 广播当前就绪人数和玩家列表
     const count = room.initialGameReady.size;
-    io.to(roomId).emit('initialGameReadyProgress', { count });
+    const readyPlayers = Array.from(room.initialGameReady);
+    io.to(roomId).emit('initialGameReadyProgress', { count, readyPlayers });
     console.log(`玩家 ${playerInfo.player.name} 已准备，当前 ${count}/4`);
+  });
+
+  // 客户端：取消初始准备
+  socket.on('cancelReadyInitial', (data) => {
+    const { roomId } = data || {};
+    const playerInfo = gameManager.getPlayerInfo(socket.id);
+    if (!playerInfo) return;
+    const room = gameManager.getRoom(roomId);
+    if (!room) return;
+    if (!room.initialGameReady) room.initialGameReady = new Set();
+    room.initialGameReady.delete(playerInfo.player.position);
+    // 广播当前就绪人数和玩家列表
+    const count = room.initialGameReady.size;
+    const readyPlayers = Array.from(room.initialGameReady);
+    io.to(roomId).emit('initialGameReadyProgress', { count, readyPlayers });
+    console.log(`玩家 ${playerInfo.player.name} 取消准备，当前 ${count}/4`);
   });
 
   // 客户端：我已准备好开始下一局
@@ -596,9 +613,25 @@ io.on('connection', (socket) => {
     if (!room) return;
     if (!room.nextGameReady) room.nextGameReady = new Set();
     room.nextGameReady.add(playerInfo.player.position);
-    // 广播当前就绪人数
+    // 广播当前就绪人数和玩家列表
     const count = room.nextGameReady.size;
-    io.to(roomId).emit('nextGameReadyProgress', { count });
+    const readyPlayers = Array.from(room.nextGameReady);
+    io.to(roomId).emit('nextGameReadyProgress', { count, readyPlayers });
+  });
+
+  // 客户端：取消准备下一局
+  socket.on('cancelReadyNext', (data) => {
+    const { roomId } = data || {};
+    const playerInfo = gameManager.getPlayerInfo(socket.id);
+    if (!playerInfo) return;
+    const room = gameManager.getRoom(roomId);
+    if (!room) return;
+    if (!room.nextGameReady) room.nextGameReady = new Set();
+    room.nextGameReady.delete(playerInfo.player.position);
+    // 广播当前就绪人数和玩家列表
+    const count = room.nextGameReady.size;
+    const readyPlayers = Array.from(room.nextGameReady);
+    io.to(roomId).emit('nextGameReadyProgress', { count, readyPlayers });
   });
 
   // 客户端：发起开始初始游戏（需要4人都ready）

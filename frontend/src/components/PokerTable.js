@@ -27,6 +27,8 @@ const PokerTable = () => {
   const [nextReadyCount, setNextReadyCount] = useState(0); // 已就绪人数
   const [waitingInitialReady, setWaitingInitialReady] = useState(false); // 是否在等待初始准备
   const [initialReadyCount, setInitialReadyCount] = useState(0); // 初始准备已就绪人数
+  const [isInitialReady, setIsInitialReady] = useState(false); // 我是否已初始准备
+  const [isNextReady, setIsNextReady] = useState(false); // 我是否已准备下一局
 
   // 监听游戏状态变化，重新计算粘主选项
   useEffect(() => {
@@ -192,7 +194,7 @@ const PokerTable = () => {
               setCounterTrumpCountdown(prev => {
                 if (prev <= 1) {
                   clearInterval(countdownInterval);
-                  setGameMessage('⏰ 反主时间结束，游戏继续');
+                  // 不在这里设置消息，等待后端发送权威消息
                   return null;
                 }
                 return prev - 1;
@@ -221,7 +223,7 @@ const PokerTable = () => {
 
       socketService.on('trumpDeclared', (data) => {
         console.log('🎺 收到亮主事件:', data);
-        setGameMessage(`🎺 ${data.playerName} 亮主: ${data.trumpSuit}`);
+        // 不显示亮主提示词
         setGameState(data.gameState);
         setTrumpCountdown(null); // 清除倒计时
         
@@ -235,7 +237,7 @@ const PokerTable = () => {
               setCounterTrumpCountdown(prev => {
                 if (prev <= 1) {
                   clearInterval(countdownInterval);
-                  setGameMessage('⏰ 反主时间结束，游戏继续');
+                  // 不在这里设置消息，等待后端发送权威消息
                   return null;
                 }
                 return prev - 1;
@@ -244,8 +246,9 @@ const PokerTable = () => {
           }
         }
         
-        // 重新排序手牌（根据主牌）
-        if (myCards.length > 0) {
+        // 只有叫主玩家才重新排序手牌
+        // 其他玩家要等到摸底结束（进入playing阶段）后才能看到主色并重新排序
+        if (myCards.length > 0 && myPosition === data.gameState?.trumpPlayer) {
           setMyCards(prev => {
             const currentLevel = data.gameState?.currentLevel || gameState?.currentLevel || 2;
             const sorted = sortCards(prev, currentLevel, data.trumpSuit);
@@ -313,12 +316,20 @@ const PokerTable = () => {
         console.log('⏳ 等待初始准备:', data);
         setGameMessage(data.message || '⏳ 等待所有玩家准备开始游戏');
         setInitialReadyCount(0);
+        setIsInitialReady(false);
         setWaitingInitialReady(true);
       }, 'PokerTable');
 
       // 初始准备就绪进度
-      socketService.on('initialGameReadyProgress', ({ count }) => {
+      socketService.on('initialGameReadyProgress', ({ count, readyPlayers }) => {
+        console.log('📊 初始准备进度:', { count, readyPlayers, myPosition });
         setInitialReadyCount(count || 0);
+        // 检查我是否在已准备列表中
+        if (readyPlayers && Array.isArray(readyPlayers) && myPosition !== -1) {
+          const isReady = readyPlayers.includes(myPosition);
+          console.log('🔍 我的准备状态:', isReady, '我的位置:', myPosition);
+          setIsInitialReady(isReady);
+        }
       }, 'PokerTable');
 
       // 被拒绝开始初始游戏（人数不足或错误）
@@ -339,12 +350,20 @@ const PokerTable = () => {
         console.log('⏸ 等待下一局，就绪请求:', data);
         setGameMessage('⏸ 本局结束，等待所有玩家点击"开始下一局"');
         setNextReadyCount(0);
+        setIsNextReady(false);
         setWaitingNext(true);
       }, 'PokerTable');
 
       // 就绪进度
-      socketService.on('nextGameReadyProgress', ({ count }) => {
+      socketService.on('nextGameReadyProgress', ({ count, readyPlayers }) => {
+        console.log('📊 下一局准备进度:', { count, readyPlayers, myPosition });
         setNextReadyCount(count || 0);
+        // 检查我是否在已准备列表中
+        if (readyPlayers && Array.isArray(readyPlayers) && myPosition !== -1) {
+          const isReady = readyPlayers.includes(myPosition);
+          console.log('🔍 我的准备状态:', isReady, '我的位置:', myPosition);
+          setIsNextReady(isReady);
+        }
       }, 'PokerTable');
 
       // 被拒绝开始（人数不足或错误）
@@ -408,6 +427,17 @@ const PokerTable = () => {
         setGameMessage(`🔄 ${data.playerName} 反主成功: 一对${data.counterTrumpRank === 'big' ? '大王' : '小王'} + 一对${data.counterTrumpPair}`);
         setGameState(data.gameState);
         setCounterTrumpCountdown(null); // 清除反主倒计时
+        
+        // 只有反主玩家才重新排序手牌
+        // 其他玩家要等到摸底结束后才重新排序
+        if (myCards.length > 0 && myPosition === data.gameState?.trumpPlayer) {
+          setMyCards(prev => {
+            const currentLevel = data.gameState?.currentLevel || gameState?.currentLevel || 2;
+            const sorted = sortCards(prev, currentLevel, data.trumpSuit);
+            setSelectedCardIds(sel => sel.filter(id => sorted.some(c => c.id === id)));
+            return sorted;
+          });
+        }
       }, 'PokerTable');
 
       socketService.on('counterTrumpError', (error) => {
@@ -448,7 +478,7 @@ const PokerTable = () => {
           setStickCountdown(prev => {
             if (prev <= 1) {
               clearInterval(countdownInterval);
-              setGameMessage('⏰ 粘主时间结束，等待摸底玩家选择扣底牌');
+              // 不在这里设置消息，等待后端发送bottomPhaseStarted事件
               return null;
             }
             return prev - 1;
@@ -466,6 +496,17 @@ const PokerTable = () => {
         setStickExchange(null);
         setSelectedExchangeCards([]);
         setSelectedCardIds([]); // 清空选中的牌
+        
+        // 只有粘主玩家才重新排序手牌
+        // 其他玩家要等到摸底结束后才重新排序
+        if (myCards.length > 0 && myPosition === data.gameState?.trumpPlayer) {
+          setMyCards(prev => {
+            const currentLevel = data.gameState?.currentLevel || gameState?.currentLevel || 2;
+            const sorted = sortCards(prev, currentLevel, data.trumpSuit);
+            setSelectedCardIds(sel => sel.filter(id => sorted.some(c => c.id === id)));
+            return sorted;
+          });
+        }
       }, 'PokerTable');
 
       socketService.on('stickTrumpError', (error) => {
@@ -524,6 +565,16 @@ const PokerTable = () => {
         setGameState(data.gameState);
         setGameMessage(`✅ ${data.playerName} 摸底完成，进入出牌阶段`);
         setSelectedCardIds([]); // 清空选中的牌
+        
+        // 摸底完成后，所有玩家根据主色重新排序手牌
+        if (myCards.length > 0 && data.gameState?.trumpSuit) {
+          setMyCards(prev => {
+            const currentLevel = data.gameState?.currentLevel || gameState?.currentLevel || 2;
+            const sorted = sortCards(prev, currentLevel, data.gameState.trumpSuit);
+            setSelectedCardIds(sel => sel.filter(id => sorted.some(c => c.id === id)));
+            return sorted;
+          });
+        }
       }, 'PokerTable');
 
       // 监听摸底错误
@@ -1265,15 +1316,33 @@ const PokerTable = () => {
               <span className="level-info">
                 当前级牌: {gameState?.currentLevel || 2}
               </span>
-              <span className="trump-info">
-                当前主色: {gameState?.trumpSuit || 'null'}
-              </span>
-              {gameState?.trumpPlayer !== null && gameState?.trumpPlayer !== undefined && (
-                <span className="trump-player-info">
-                  🎺 亮主玩家: {room?.players?.[gameState.trumpPlayer]?.name || `玩家${gameState.trumpPlayer + 1}`}
-                  {gameState.trumpRank && ` (${gameState.trumpRank})`}
-                </span>
-              )}
+              {/* 主色信息：摸底阶段结束后才对所有人显示，之前只有叫主玩家能看到 */}
+              {(() => {
+                const isTrumpPlayer = myPosition === gameState?.trumpPlayer;
+                // 摸底阶段结束后（进入playing或finished阶段）才对所有人显示
+                const isAfterBottom = gameState?.gamePhase === 'playing' || gameState?.gamePhase === 'finished';
+                const shouldShowTrumpSuit = !gameState?.trumpSuit || isTrumpPlayer || isAfterBottom;
+                
+                return shouldShowTrumpSuit && gameState?.trumpSuit && (
+                  <span className="trump-info">
+                    当前主色: {gameState.trumpSuit}
+                  </span>
+                );
+              })()}
+              {/* 亮主玩家信息：摸底结束前只显示玩家名，之后显示亮主牌型 */}
+              {gameState?.trumpPlayer !== null && gameState?.trumpPlayer !== undefined && (() => {
+                const isTrumpPlayer = myPosition === gameState?.trumpPlayer;
+                // 摸底阶段结束后才显示亮主牌型
+                const isAfterBottom = gameState?.gamePhase === 'playing' || gameState?.gamePhase === 'finished';
+                const shouldShowRank = isTrumpPlayer || isAfterBottom;
+                
+                return (
+                  <span className="trump-player-info">
+                    🎺 亮主玩家: {room?.players?.[gameState.trumpPlayer]?.name || `玩家${gameState.trumpPlayer + 1}`}
+                    {shouldShowRank && gameState.trumpRank && ` (${gameState.trumpRank})`}
+                  </span>
+                );
+              })()}
                {gameState?.idleScore !== undefined && (
                  <span className="idle-score-info">
                    💰 闲家得分{isIdlePlayer() ? '（你）' : ''}: {gameState.idleScore}
@@ -1553,17 +1622,24 @@ const PokerTable = () => {
                 (gameState?.gamePhase === 'playing' && gameState?.currentTurn === myPosition)
               }
             />
+          </div>
 
+      {/* 准备按钮 - 独立区域，在屏幕下方 */}
       {waitingInitialReady && (
-        <div className="next-game-panel" style={{marginTop: '12px'}}>
+        <div className="ready-panel">
           <button
-            className="action-btn"
+            className={`action-btn ${isInitialReady ? 'ready-btn' : ''}`}
             onClick={() => {
-              socketService.emit('readyInitial', { roomId });
+              if (isInitialReady) {
+                setIsInitialReady(false); // 乐观更新
+                socketService.emit('cancelReadyInitial', { roomId });
+              } else {
+                setIsInitialReady(true); // 乐观更新
+                socketService.emit('readyInitial', { roomId });
+              }
             }}
-            style={{ marginRight: 8 }}
           >
-            我已准备好
+            {isInitialReady ? '取消准备' : '准备'}
           </button>
           <button
             className="action-btn"
@@ -1577,15 +1653,20 @@ const PokerTable = () => {
       )}
 
       {waitingNext && (
-        <div className="next-game-panel" style={{marginTop: '12px'}}>
+        <div className="ready-panel">
           <button
-            className="action-btn"
+            className={`action-btn ${isNextReady ? 'ready-btn' : ''}`}
             onClick={() => {
-              socketService.emit('readyNext', { roomId });
+              if (isNextReady) {
+                setIsNextReady(false); // 乐观更新
+                socketService.emit('cancelReadyNext', { roomId });
+              } else {
+                setIsNextReady(true); // 乐观更新
+                socketService.emit('readyNext', { roomId });
+              }
             }}
-            style={{ marginRight: 8 }}
           >
-            我已准备好
+            {isNextReady ? '取消准备' : '准备'}
           </button>
           <button
             className="action-btn"
@@ -1597,13 +1678,7 @@ const PokerTable = () => {
           </button>
         </div>
       )}
-          </div>
 
-          {myCards.length === 0 && (
-            <div className="waiting-cards">
-              <p>⏳ 等待发牌...</p>
-            </div>
-          )}
         </>
       )}
     </div>
