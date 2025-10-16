@@ -58,9 +58,10 @@ class CardTypeValidator {
     }
     
     // 其他牌的基础值（按升级规则：A>K>Q>J>10>9>8>7>6>4，相邻牌差值为1）
+    // 注意：所有rank键都使用字符串类型
     const rankValues = {
       'A': 914, 'K': 913, 'Q': 912, 'J': 911, 
-      10: 910, 9: 909, 8: 908, 7: 907, 6: 906, 4: 904
+      '10': 910, '9': 909, '8': 908, '7': 907, '6': 906, '4': 904
     };
     
     const baseValue = rankValues[rankStrGV] || 0;
@@ -70,9 +71,10 @@ class CardTypeValidator {
       // 主花色普通牌的权重应该低于所有特殊主牌，但高于副牌
       // 特殊主牌权重: 大王999, 小王998, 主级牌997, 副级牌996, 常主995-990
       // 主花色普通牌权重范围: 980-989（保持连续性）
+      // 注意：所有rank键都使用字符串类型
       const trumpNormalRankValues = {
         'A': 989, 'K': 988, 'Q': 987, 'J': 986, 
-        10: 985, 9: 984, 8: 983, 7: 982, 6: 981, 4: 980
+        '10': 985, '9': 984, '8': 983, '7': 982, '6': 981, '4': 980
       };
       return trumpNormalRankValues[rankStrGV] || 980;
     }
@@ -222,8 +224,9 @@ class CardTypeValidator {
       
       // 主花色普通牌 - 使用连续的数值
       if (card.suit === trumpSuit) {
-        const trumpRankOrder = ['A', 'K', 'Q', 'J', 10, 9, 8, 7, 6, 4];
-        const index = trumpRankOrder.indexOf(card.rank);
+        const rankStr = String(card.rank);
+        const trumpRankOrder = ['A', 'K', 'Q', 'J', '10', '9', '8', '7', '6', '4'];
+        const index = trumpRankOrder.indexOf(rankStr);
         if (index !== -1) {
           return 991 - index; // 从991开始递减，保持连续性
         }
@@ -233,8 +236,10 @@ class CardTypeValidator {
       return 980;
     } else {
       // 副牌：使用基础的连续序列，排除常主和级牌
-      const isLevelCard = card.rank === currentLevel;
-      const isPermanentTrump = [2, 3, 5].includes(card.rank);
+      const rankStr = String(card.rank);
+      const levelStr = String(currentLevel);
+      const isLevelCard = rankStr === levelStr;
+      const isPermanentTrump = ['2', '3', '5'].includes(rankStr);
       
       // 级牌和常主不能作为副牌参与连对
       if (isLevelCard || isPermanentTrump) {
@@ -243,8 +248,9 @@ class CardTypeValidator {
       
       // B2规则：副牌按自然连续序列（包含5），但5本身被标记为常主且已在上方返回-1
       // 因此6与4之间存在断点（缺少5）将不视为连续
-      const suitRankOrder = ['A', 'K', 'Q', 'J', 10, 9, 8, 7, 6, 5, 4];
-      const index = suitRankOrder.indexOf(card.rank);
+      // 注意：所有rank都使用字符串类型，包括'10'
+      const suitRankOrder = ['A', 'K', 'Q', 'J', '10', '9', '8', '7', '6', '5', '4'];
+      const index = suitRankOrder.indexOf(rankStr);
       if (index !== -1) {
         return 100 + (suitRankOrder.length - 1 - index); // 从100开始递增，保持连续性
       }
@@ -426,8 +432,8 @@ class CardTypeValidator {
     }
 
     // 4) 计算秩序并检查“覆盖连续区间”。允许重复（两幅牌），但所有牌值必须落在该连续区间内
-    const order = [2, 3, 4, 5, 6, 7, 8, 9, 10, 'J', 'Q', 'K', 'A'];
-    const toIdx = (r) => order.indexOf(r);
+    const order = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A'];
+    const toIdx = (r) => order.indexOf(String(r));
     const idxs = cards.map(c => toIdx(c.rank)).filter(i => i >= 0);
     if (idxs.length !== cards.length) return { valid: false };
 
@@ -510,7 +516,7 @@ class ShandongUpgradeGame {
     this.stickInterrupted = false;
     
     // 山东升级特色：2,3,5为常主
-    this.permanentTrumps = [2, 3, 5];
+    this.permanentTrumps = ['2', '3', '5'];
     
     // 调试模式
     this.debugMode = debugMode;
@@ -530,7 +536,7 @@ class ShandongUpgradeGame {
   createDeck() {
     this.deck = [];
     const suits = ['spades', 'hearts', 'diamonds', 'clubs'];
-    const ranks = [2, 3, 4, 5, 6, 7, 8, 9, 10, 'J', 'Q', 'K', 'A'];
+    const ranks = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A'];
     
     // 创建两副牌
     for (let deckNum = 0; deckNum < 2; deckNum++) {
@@ -935,7 +941,7 @@ class ShandongUpgradeGame {
     }
     const isLevelOrPermanent = (card) => {
       if (card.suit === 'joker') return false;
-      if ([2, 3, 5].includes(card.rank)) return true; // 常主
+      if (['2', '3', '5'].includes(String(card.rank))) return true; // 常主
       return card.rank === this.currentLevel; // 级牌
     };
     const levelOrPermanentCount = giveBackCards.filter(isLevelOrPermanent).length;
@@ -1008,10 +1014,37 @@ class ShandongUpgradeGame {
     this._clearTimer('declareTimer');
     const ms = Math.max(0, (this.declareEndTime || 0) - Date.now());
     this._timers.declareTimer = setTimeout(() => {
-      // 如果截止时仍无人亮主，则结束游戏
+      // 如果截止时仍无人亮主
       if (this.trumpSuit === null) {
-        this.gamePhase = 'finished';
-        console.log('叫主阶段无人亮主，游戏结束');
+        if (this.isFirstRound) {
+          // 首局：提示并重发，保持庄家不变（默认0号或当前设定）
+          console.log('叫主阶段无人亮主（首局）：无人叫主，重新发牌');
+          // 可以通过回调通知前端提示词
+          this._onNoBidFirstRound && this._onNoBidFirstRound();
+          this._redealForNoBid();
+        } else {
+          // 非首局：闲家升三级，闲家成为庄家，然后重发
+          console.log('叫主阶段无人亮主（非首局）：闲家升三级，成为庄家，重新发牌');
+          // 计算并应用“闲家升三级”与“闲家成为庄家”
+          const idleTeam = (this.dealer + 1) % 2; // 闲家队伍索引（0或1），与庄家队伍相反
+          // 升三级：调整 currentLevel
+          const levelOrder = ['2','3','4','5','6','7','8','9','10','J','Q','K','A'];
+          const curIdx = levelOrder.indexOf(String(this.currentLevel));
+          const newIdx = Math.min(curIdx + 3, levelOrder.length - 1);
+          this.currentLevel = levelOrder[newIdx];
+          // 闲家成为庄家：选择闲家队伍内的庄家下家作为新庄家（与 getIdleTeamNextDealer 一致逻辑）
+          let newDealer = (this.dealer + 1) % 4;
+          if (idleTeam === 0) {
+            if (newDealer % 2 !== 0) newDealer = (newDealer + 1) % 4;
+          } else {
+            if (newDealer % 2 !== 1) newDealer = (newDealer + 1) % 4;
+          }
+          this.dealer = newDealer;
+          // 通知前端提示词
+          this._onNoBidLaterRound && this._onNoBidLaterRound({ newLevel: this.currentLevel, newDealer });
+          // 重发
+          this._redealForNoBid();
+        }
       }
     }, ms);
   }
@@ -1062,6 +1095,39 @@ class ShandongUpgradeGame {
     this._clearTimer('declareTimer');
     this._clearTimer('counterTimer');
     this._clearTimer('stickTimer');
+  }
+
+  // 无人叫主后的重发：清理本局状态并重新发牌（保留当前级别与既定庄家）
+  _redealForNoBid() {
+    // 清定时器与阶段性状态
+    this._clearAllPhaseTimers();
+    this.trumpSuit = null;
+    this.trumpPlayer = null;
+    this.firstTrumpPlayer = null;
+    this.trumpRank = null;
+    this.counterTrumpPlayer = null;
+    this.counterTrumpEndTime = null;
+    this.declareEndTime = null;
+    this.stickEndTime = null;
+    this.bottomCards = [];
+    this.currentRound = 0;
+    this.currentTurn = 0;
+    this.roundCards = [];
+    this.idleScore = 0;
+    this.gamePhase = 'dealing';
+    this.dealingEndTime = null;
+
+    // 重置玩家手牌与庄家标记（保留 this.dealer 座位为新庄家）
+    this.players.forEach((p) => {
+      p.receiveCards([]);
+      p.setDealer(false);
+    });
+    this.players.forEach((p, idx) => p.setDealer(idx === this.dealer));
+
+    // 重新洗切并发牌
+    this.createDeck();
+    this.shuffleDeck();
+    this.dealCards();
   }
 
   // 由服务端在发牌动画完成时调用：开启10秒叫主窗口
@@ -1547,10 +1613,22 @@ class ShandongUpgradeGame {
 
   // 按牌力排序（从大到小）
   sortCardsByValue(cards) {
-    return [...cards].sort((a, b) => 
+    try {
+      console.log('🔧 [取值调试] 排序输入:', cards.map(c => `${c.suit}_${c.rank}`));
+      console.log('🔧 [取值调试] 明细:', cards.map(c => {
+        const val = CardTypeValidator.getCardValue(c, this.currentLevel, this.trumpSuit);
+        const trump = CardTypeValidator.isCardTrump(c, this.currentLevel, this.trumpSuit);
+        return `${c.suit}_${c.rank} -> ${val}${trump ? ' (trump)' : ''}`;
+      }));
+    } catch (e) {}
+    const sorted = [...cards].sort((a, b) => 
       CardTypeValidator.getCardValue(b, this.currentLevel, this.trumpSuit) - 
       CardTypeValidator.getCardValue(a, this.currentLevel, this.trumpSuit)
     );
+    try {
+      console.log('🔧 [取值调试] 排序输出:', sorted.map(c => `${c.suit}_${c.rank}`));
+    } catch (e) {}
+    return sorted;
   }
 
   // 检查强制单张跟牌
@@ -1611,21 +1689,149 @@ class ShandongUpgradeGame {
 
   // 检查强制连对跟牌
   checkMandatoryConsecutivePairs(cardsToPlay, sortedAvailable, requiredPairCount) {
+    try {
+      console.log('🔎 [连对跟牌调试] 入参:', {
+        requiredPairCount,
+        sortedAvailable: sortedAvailable.map(c => `${c.suit}_${c.rank}`),
+        cardsToPlay: cardsToPlay.map(c => `${c.suit}_${c.rank}`)
+      });
+    } catch (e) {}
     const pairs = this.findPairs(sortedAvailable);
     const availablePairCount = pairs.length;
+    try {
+      console.log('🔎 [连对跟牌调试] 可用对子:', pairs.map(p => `${p[0].suit}_${p[0].rank}`));
+      console.log('🔎 [连对跟牌调试] 可用对子数量:', availablePairCount);
+    } catch (e) {}
     
-    if (availablePairCount >= requiredPairCount) {
-      // 有足够的对子，可以选择出哪些对子
+    // 计算可用对子按“连续值”的最长连续链长度，以及是否存在额外对子
+    const pairValues = pairs.map(p => CardTypeValidator.getSequentialValue(p[0], this.currentLevel, this.trumpSuit)).sort((a,b)=>a-b);
+    let maxChainLen = 0;
+    let curLen = 0;
+    for (let i = 0; i < pairValues.length; i++) {
+      if (i === 0 || pairValues[i] === pairValues[i-1] + 1) {
+        curLen = (i === 0) ? 1 : curLen + 1;
+      } else if (pairValues[i] === pairValues[i-1]) {
+        // 同值（同点数多对）不延长连续链
+        continue;
+      } else {
+        curLen = 1;
+      }
+      if (curLen > maxChainLen) maxChainLen = curLen;
+    }
+    const extraPairsCount = Math.max(0, availablePairCount - maxChainLen);
+
+    
+    if (maxChainLen >= requiredPairCount) {
+      // 有足够的对子：必须打出合法的“连对”（同花且连续），对数必须匹配
       const playedPairs = this.identifyPlayedPairs(cardsToPlay);
+      try {
+        console.log('🔎 [连对跟牌调试] 有两联对分支 - 出的对子:', playedPairs.map(p => `${p[0].suit}_${p[0].rank}`));
+      } catch (e) {}
       if (playedPairs.length !== requiredPairCount) {
         return { 
           valid: false, 
           message: `必须出${requiredPairCount}对` 
         };
       }
+      // 校验是否构成合法连对（与首家保持一致的判定）
+      const consecCheck = CardTypeValidator.identifyConsecutivePairs(cardsToPlay, this.currentLevel, this.trumpSuit);
+      if (!consecCheck.valid || consecCheck.pairCount !== requiredPairCount) {
+        return {
+          valid: false,
+          message: '有足够对子时必须出同花且连续的连对'
+        };
+      }
       return { valid: true };
+    } else if (maxChainLen === requiredPairCount - 1) {
+      // 有两联对（长度N-1）：必须先出一条长度为N-1的连续链，缺口优先用"对子"补；若无对子可补，则用最大单张补
+      const playedPairs = this.identifyPlayedPairs(cardsToPlay);
+      
+      // 出的对子数量应该是N-1（两联对）或N（两联对+额外对子）
+      if (playedPairs.length < requiredPairCount - 1 || playedPairs.length > requiredPairCount) {
+        return { valid: false, message: `必须出${requiredPairCount - 1}或${requiredPairCount}对` };
+      }
+      
+      const playedPairValues = playedPairs.map(p => CardTypeValidator.getSequentialValue(p[0], this.currentLevel, this.trumpSuit)).sort((a,b)=>a-b);
+      // 检查出的对子中是否包含至少一个长度为N-1的连续链
+      let hasChain = false;
+      for (let start = 0; start + (requiredPairCount - 1) <= playedPairValues.length; start++) {
+        let ok = true;
+        for (let k = 1; k < (requiredPairCount - 1); k++) {
+          if (playedPairValues[start + k] !== playedPairValues[start + k - 1] + 1) { ok = false; break; }
+        }
+        if (ok && (requiredPairCount - 1) > 0) {
+          hasChain = true;
+          break;
+        }
+      }
+      if (!hasChain) {
+        return { valid: false, message: `必须包含一个${requiredPairCount - 1}联对` };
+      }
+      
+      // 余下检查：根据出的对子数量和是否有额外对子判断
+      if (playedPairs.length === requiredPairCount) {
+        // 出了N个对子（两联对+额外对子）
+        if (extraPairsCount >= 1) {
+          return { valid: true };
+        } else {
+          return { valid: false, message: `没有额外对子时，缺口必须用最大单张补齐` };
+        }
+      } else {
+        // 出了N-1个对子（两联对），剩余用单张补齐
+        const remainingCount = requiredPairCount * 2 - playedPairs.length * 2;
+        const playedPairCardIds = new Set(playedPairs.flat().map(c => c.id));
+        const playedSingles = cardsToPlay.filter(c => !playedPairCardIds.has(c.id));
+        
+        if (playedSingles.length !== remainingCount) {
+          return { valid: false, message: `出牌数量不匹配` };
+        }
+        
+        if (extraPairsCount >= 1) {
+          // 有额外对子但用单张补了，不合法
+          return { valid: false, message: '有额外对子时，缺口必须以对子补齐' };
+        } else {
+        // 没有额外对子，用单张补，检查是否是最大单张
+          // 注意：使用“点数+花色”多重集剔除对子，避免因id不一致导致只剔除一张
+          const pairCounts = {};
+          for (const pr of pairs) {
+            const k = `${pr[0].suit}_${pr[0].rank}`;
+            pairCounts[k] = (pairCounts[k] || 0) + 2;
+          }
+          const remainingCards = [];
+          for (const c of sortedAvailable) {
+            const k = `${c.suit}_${c.rank}`;
+            if (pairCounts[k] > 0) {
+              pairCounts[k]--;
+              continue;
+            }
+            remainingCards.push(c);
+          }
+          const expectedSingles = remainingCards.slice(0, remainingCount);
+          try {
+            console.log('🔎 [连对跟牌调试] 单张补齐校验:', {
+              remainingCount,
+              remainingPool: remainingCards.map(c => `${c.suit}_${c.rank}`),
+              expectedSingles: expectedSingles.map(c => `${c.suit}_${c.rank}`),
+              playedSingles: playedSingles.map(c => `${c.suit}_${c.rank}`)
+            });
+          } catch (e) {}
+          if (!this.cardsMatchWithSameValue(this.sortCardsByValue(playedSingles), expectedSingles)) {
+            return { valid: false, message: `缺口必须以最大的单张补齐: ${expectedSingles.map(c => this.getCardDisplayName(c)).join(', ')}` };
+          }
+          return { valid: true };
+        }
+      }
     } else if (availablePairCount > 0) {
-      // 有部分对子，必须出所有对子 + 最大的单张补全
+      // 无法组成两联对，或只有零散对子：
+      // 若可用对子数量≥requiredPairCount：允许任意挑选 requiredPairCount 个对子
+      if (availablePairCount >= requiredPairCount) {
+        const playedPairs = this.identifyPlayedPairs(cardsToPlay);
+        if (playedPairs.length !== requiredPairCount) {
+          return { valid: false, message: `必须出${requiredPairCount}对` };
+        }
+        return { valid: true };
+      }
+      // 否则：必须出所有对子 + 最大的单张补全
       const playedPairs = this.identifyPlayedPairs(cardsToPlay);
       if (playedPairs.length !== availablePairCount) {
         return { 
@@ -1636,15 +1842,39 @@ class ShandongUpgradeGame {
       
       // 检查剩余单张是否是最大的
       const remainingCount = requiredPairCount * 2 - availablePairCount * 2;
-      const usedInPairs = new Set(pairs.flat().map(c => c.id));
-      const remainingCards = sortedAvailable.filter(c => !usedInPairs.has(c.id));
+      // 从“可用对子”中抽离已使用的对子牌，避免误把对子里的牌当作单张补齐
+      // 使用“点数+花色”多重集方式更稳健
+      const pairCounts = {};
+      for (const pr of pairs) {
+        const k = `${pr[0].suit}_${pr[0].rank}`;
+        pairCounts[k] = (pairCounts[k] || 0) + 2;
+      }
+      const remainingCards = [];
+      for (const c of sortedAvailable) {
+        const k = `${c.suit}_${c.rank}`;
+        if (pairCounts[k] > 0) {
+          pairCounts[k]--;
+          continue;
+        }
+        remainingCards.push(c);
+      }
       const expectedRemaining = remainingCards.slice(0, remainingCount);
       
-      const playedSingles = cardsToPlay.filter(c => 
-        !pairs.flat().some(p => p.id === c.id)
-      );
+      // 从玩家出的牌中找出单张（排除对子中的牌）
+      const playedPairCardIds = new Set(playedPairs.flat().map(c => c.id));
+      const playedSingles = cardsToPlay.filter(c => !playedPairCardIds.has(c.id));
+      try {
+        console.log('🔎 [连对跟牌调试] 部分对子分支 - 单张补齐校验:', {
+          availablePairCount,
+          remainingCount,
+          remainingPool: remainingCards.map(c => `${c.suit}_${c.rank}`),
+          expectedSingles: expectedRemaining.map(c => `${c.suit}_${c.rank}`),
+          playedSingles: playedSingles.map(c => `${c.suit}_${c.rank}`)
+        });
+      } catch (e) {}
       
-      if (!this.cardsMatch(this.sortCardsByValue(playedSingles), expectedRemaining)) {
+      // 验证玩家出的单张是否是最大的（允许相同取值的牌替换）
+      if (!this.cardsMatchWithSameValue(this.sortCardsByValue(playedSingles), expectedRemaining)) {
         return { 
           valid: false, 
           message: `剩余必须用最大的单张补全: ${expectedRemaining.map(c => this.getCardDisplayName(c)).join(', ')}` 
@@ -1766,20 +1996,12 @@ class ShandongUpgradeGame {
         const card2 = cards[j];
         
         // 检查是否为对子（同点数同花色，或王对王）
-        if (card1.rank === card2.rank) {
-          if (card1.suit === card2.suit) {
-            // 同花色对子
-            pairs.push([card1, card2]);
-            used.add(i);
-            used.add(j);
-            break; // 找到对子后跳出内层循环
-          } else if (card1.suit === 'joker' && card2.suit === 'joker' && card1.rank === card2.rank) {
-            // 王对王
-            pairs.push([card1, card2]);
-            used.add(i);
-            used.add(j);
-            break; // 找到对子后跳出内层循环
-          }
+        if (card1.rank === card2.rank && card1.suit === card2.suit) {
+          // 同花色对子
+          pairs.push([cards[i], cards[j]]);
+          used.add(i);
+          used.add(j);
+          break; // 找到对子后跳出内层循环
         }
       }
     }
@@ -1890,6 +2112,17 @@ class ShandongUpgradeGame {
     const ids2 = cards2.map(c => c.id).sort();
     
     return ids1.every((id, index) => id === ids2[index]);
+  }
+
+  // 检查两组牌是否匹配（允许相同取值的牌替换）
+  cardsMatchWithSameValue(cards1, cards2) {
+    if (cards1.length !== cards2.length) return false;
+    
+    // 按取值排序并比较
+    const values1 = cards1.map(c => CardTypeValidator.getCardValue(c, this.currentLevel, this.trumpSuit)).sort((a,b) => b-a);
+    const values2 = cards2.map(c => CardTypeValidator.getCardValue(c, this.currentLevel, this.trumpSuit)).sort((a,b) => b-a);
+    
+    return values1.every((value, index) => value === values2[index]);
   }
 
   // 获取牌的显示名称
@@ -2079,6 +2312,7 @@ class ShandongUpgradeGame {
     }
     
     // 3) 能力评估 - 连对（对数）
+    // 注意：连对至少需要2对连续的对子，单个对子不算连对能力
     try {
       const pairs = analysis.pairs.map(p => p[0]); // 用每对的第一张代表该点数
       // 基于顺序值寻找最长连续长度
@@ -2098,7 +2332,8 @@ class ShandongUpgradeGame {
         prev = v;
       }
       best = Math.max(best, curr);
-      analysis.capabilities.consecutivePairsPairs = Math.max(best, 0);
+      // 只有2对及以上才算作连对能力
+      analysis.capabilities.consecutivePairsPairs = best >= 2 ? best : 0;
     } catch (e) {
       analysis.capabilities.consecutivePairsPairs = 0;
     }
@@ -2135,19 +2370,38 @@ class ShandongUpgradeGame {
 
   // 构建强制甩牌组合
   buildMandatoryMixedCombo(leadAnalysis, availableAnalysis, sortedAvailable) {
+    console.log('🔍 buildMandatoryMixedCombo 调试:');
+    console.log('  首家分析:', {
+      pairs: leadAnalysis.pairs.length,
+      singles: leadAnalysis.singles.length,
+      capabilities: leadAnalysis.capabilities
+    });
+    console.log('  跟牌者分析:', {
+      pairs: availableAnalysis.pairs.length,
+      singles: availableAnalysis.singles.length,
+      capabilities: availableAnalysis.capabilities
+    });
+    
     const mandatoryCombo = {
       pairs: [],
       singlesForPairs: [],     // 补对所需最大单张
       singlesFlexibleCount: 0, // 对应首家单张单位 + 高阶单位降阶后的单张
+      totalCardsRequired: 0,   // 首家出牌总数
       description: ""
     };
     
-    // 1) 计算首家“高阶单位”的需求（按优先级：闪/震 -> 顺子 -> 连对）
+    // 0) 计算首家出牌总数（这是必须匹配的总牌数）
+    const leadTotalCards = (leadAnalysis.pairs.length * 2) + leadAnalysis.singles.length;
+    mandatoryCombo.totalCardsRequired = leadTotalCards;
+    
+    console.log(`  首家出牌总数: ${leadTotalCards}张`);
+    
+    // 1) 计算首家"高阶单位"的需求（按优先级：闪/震 -> 顺子 -> 连对）
     let reqFlashCards = leadAnalysis.capabilities.flashThunderCount || 0;
     let reqStraightCards = leadAnalysis.capabilities.straightCount || 0;
     let reqConsecPairs = leadAnalysis.capabilities.consecutivePairsPairs || 0; // 对数
     
-    // 2) 计算可用“高阶单位”能力
+    // 2) 计算可用"高阶单位"能力
     const haveFlashCards = availableAnalysis.capabilities.flashThunderCount || 0;
     const haveStraightCards = availableAnalysis.capabilities.straightCount || 0;
     const haveConsecPairs = availableAnalysis.capabilities.consecutivePairsPairs || 0;
@@ -2157,69 +2411,161 @@ class ShandongUpgradeGame {
     const usedStraight = Math.min(reqStraightCards, haveStraightCards);
     const usedConsecPairs = Math.min(reqConsecPairs, haveConsecPairs);
     
-    // 4) 不足部分进行“降阶”：
-    //    - 闪/震 & 顺子：缺口张数全部用“最大单张”补齐（不再按张数折算对子）
-    //    - 连对：缺口先用对子补，若对子不足，再用“最大单张”按2张/对补齐
+    // 4) 不足部分进行"降阶"：
+    //    - 闪/震 & 顺子：缺口张数全部用"最大单张"补齐（不再按张数折算对子）
+    //    - 连对：缺口先用对子补，若对子不足，再用"最大单张"按2张/对补齐
     let deficitFlashCards = Math.max(0, reqFlashCards - usedFlash);
     let deficitStraightCards = Math.max(0, reqStraightCards - usedStraight);
     let deficitConsecPairs = Math.max(0, reqConsecPairs - usedConsecPairs);
     
-    let requiredPairs = leadAnalysis.pairs.length + deficitConsecPairs; // 连对缺口折算为对子需求
-    let requiredSingles = leadAnalysis.singles.length; // 首家“单张单位”只计数量（任意单张）
+    // 连对缺口：先用连对能力补，不足部分用对子补，最后才用单张补
+    const pairsUsedForConsec = Math.min(haveConsecPairs, deficitConsecPairs);
+    const remainingConsecDeficit = Math.max(0, deficitConsecPairs - pairsUsedForConsec);
     
-    // 闪/震+顺子的缺口：全部转化为“必须用最大单张”补齐
-    const highSinglesNeeded = deficitFlashCards + deficitStraightCards;
+    // 计算对子需求：
+    // 1. 如果跟牌者有连对能力匹配首家连对，那么连对覆盖的对子不需要额外的对子
+    // 2. 如果跟牌者没有连对能力，则需要用普通对子补齐（有几个对子出几个）
+    let requiredPairs = 0;
+    let pairDeficitFromConsec = 0;  // 连对缺口需要的对子数
     
-    // 5) 使用可用对子满足 requiredPairs
-    const availablePairs = availableAnalysis.pairs.length;
-    if (availablePairs > 0) {
-      const takePairs = Math.min(availablePairs, requiredPairs);
-      mandatoryCombo.pairs = availableAnalysis.pairs.slice(0, takePairs);
+    if (reqConsecPairs > 0) {
+      // 首家有连对需求
+      if (usedConsecPairs > 0) {
+        // 跟牌者有连对能力，可以部分匹配
+        // 已匹配的连对不需要对子，未匹配的连对需要用对子补
+        pairDeficitFromConsec = remainingConsecDeficit;
+      } else {
+        // 跟牌者完全没有连对能力，需要用对子补齐所有连对
+        pairDeficitFromConsec = reqConsecPairs;
+      }
     }
     
-    // 6) 计算对子缺口并与高阶缺口一起用“最大单张”补齐
+    // 独立对子需求（不在连对中的对子）
+    const independentPairs = leadAnalysis.pairs.length - (reqConsecPairs > 0 ? reqConsecPairs : 0);
+    requiredPairs = Math.max(0, independentPairs) + pairDeficitFromConsec;
+    
+    let requiredSingles = leadAnalysis.singles.length; // 首家"单张单位"只计数量（任意单张）
+    
+    // 5) 使用可用对子满足对子需求（优先用对子，有几个用几个）
+    const availablePairs = availableAnalysis.pairs.length;
+    const takePairs = Math.min(availablePairs, requiredPairs);
+    mandatoryCombo.pairs = availableAnalysis.pairs.slice(0, takePairs);
+    
+    // 6) 计算对子缺口和连对缺口，用"最大单张"补齐
     const missingPairs = Math.max(0, requiredPairs - mandatoryCombo.pairs.length);
     const usedInPairs = new Set(mandatoryCombo.pairs.flat().map(c => c.id));
     const remainingCards = sortedAvailable.filter(c => !usedInPairs.has(c.id));
+    
+    // 需要用单张补齐的数量：
+    // - 对子缺口 * 2
+    // - 闪/震缺口
+    // - 顺子缺口  
+    // - 连对缺口中未被对子补齐的部分 * 2
     const singlesNeededForPairs = missingPairs * 2;
-    const totalMustSingles = highSinglesNeeded + singlesNeededForPairs;
+    const singlesNeededForHighUnits = deficitFlashCards + deficitStraightCards;
+    const totalMustSingles = singlesNeededForPairs + singlesNeededForHighUnits;
     mandatoryCombo.singlesForPairs = remainingCards.slice(0, totalMustSingles);
     
-    // 7) 记录“对应首家单张单位”的数量需求（不限定具体牌，任意单张即可）
+    // 7) 记录"对应首家单张单位"的数量需求（不限定具体牌，任意单张即可）
     mandatoryCombo.singlesFlexibleCount = requiredSingles;
     
-    // 8) 描述文本
+    // 8) 确保总牌数匹配：计算当前已要求的牌数，如果不足则补齐
+    const currentRequiredCards = (mandatoryCombo.pairs.length * 2) + 
+                                 mandatoryCombo.singlesForPairs.length + 
+                                 mandatoryCombo.singlesFlexibleCount;
+    
+    console.log(`  当前已要求牌数: ${currentRequiredCards}张，应要求: ${leadTotalCards}张`);
+    
+    if (currentRequiredCards < leadTotalCards) {
+      // 需要补足更多单张
+      const additionalSinglesNeeded = leadTotalCards - currentRequiredCards;
+      mandatoryCombo.singlesFlexibleCount += additionalSinglesNeeded;
+      console.log(`  补足 ${additionalSinglesNeeded} 张任意单张`);
+    }
+    
+    // 9) 描述文本
     const parts = [];
     if (mandatoryCombo.pairs.length > 0) parts.push(`${mandatoryCombo.pairs.length}对`);
     if (mandatoryCombo.singlesForPairs.length > 0) parts.push(`${mandatoryCombo.singlesForPairs.length}张补对最大单张`);
     if (mandatoryCombo.singlesFlexibleCount > 0) parts.push(`${mandatoryCombo.singlesFlexibleCount}张任意单张`);
     mandatoryCombo.description = parts.join(" + ");
     
+    console.log('  计算结果:', {
+      reqConsecPairs,
+      usedConsecPairs,
+      pairDeficitFromConsec,
+      independentPairs,
+      requiredPairs,
+      requiredSingles,
+      deficitConsecPairs,
+      pairsUsedForConsec,
+      remainingConsecDeficit,
+      missingPairs,
+      singlesNeededForPairs,
+      singlesNeededForHighUnits,
+      totalMustSingles,
+      currentRequiredCards,
+      leadTotalCards,
+      mandatoryCombo: {
+        pairs: mandatoryCombo.pairs.length,
+        singlesForPairs: mandatoryCombo.singlesForPairs.length,
+        singlesFlexibleCount: mandatoryCombo.singlesFlexibleCount,
+        totalCardsRequired: mandatoryCombo.totalCardsRequired,
+        description: mandatoryCombo.description
+      }
+    });
+    
     return mandatoryCombo;
   }
 
   // 验证甩牌组合
   validateMixedCombo(playedAnalysis, mandatoryCombo) {
-    // 检查对子数量
-    if (playedAnalysis.pairs.length !== mandatoryCombo.pairs.length) {
+    console.log('🔍 validateMixedCombo 验证:');
+    console.log('  实际出牌:', {
+      pairs: playedAnalysis.pairs.length,
+      singles: playedAnalysis.singles.length,
+      totalCards: (playedAnalysis.pairs.length * 2) + playedAnalysis.singles.length
+    });
+    console.log('  要求组合:', {
+      pairs: mandatoryCombo.pairs.length,
+      singlesForPairs: mandatoryCombo.singlesForPairs.length,
+      singlesFlexibleCount: mandatoryCombo.singlesFlexibleCount,
+      totalCardsRequired: mandatoryCombo.totalCardsRequired
+    });
+    
+    // 1. 首先检查总牌数是否相等（最重要的检查）
+    const playedTotalCards = (playedAnalysis.pairs.length * 2) + playedAnalysis.singles.length;
+    if (playedTotalCards !== mandatoryCombo.totalCardsRequired) {
+      console.log(`  ❌ 总牌数不匹配: 出了${playedTotalCards}张，应出${mandatoryCombo.totalCardsRequired}张`);
       return false;
     }
     
-    // 检查“用于补对的最大单张”是否全部包含在出的单张里
+    // 2. 检查对子数量
+    if (playedAnalysis.pairs.length !== mandatoryCombo.pairs.length) {
+      console.log(`  ❌ 对子数量不匹配: 出了${playedAnalysis.pairs.length}对，应出${mandatoryCombo.pairs.length}对`);
+      return false;
+    }
+    
+    // 3. 检查"用于补对的最大单张"是否全部包含在出的单张里
     if (mandatoryCombo.singlesForPairs.length > 0) {
       const mustSingles = new Set(mandatoryCombo.singlesForPairs.map(c => c.id));
       const playedSinglesSet = new Set(playedAnalysis.singles.map(c => c.id));
       for (const id of mustSingles) {
-        if (!playedSinglesSet.has(id)) return false;
+        if (!playedSinglesSet.has(id)) {
+          console.log(`  ❌ 缺少必须的最大单张: ${id}`);
+          return false;
+        }
       }
     }
     
-    // 检查总单张数量是否满足（= 补对所需张数 + 领出单张单位数量）
+    // 4. 检查总单张数量是否满足（= 补对所需张数 + 灵活单张数量）
     const requiredSinglesTotal = (mandatoryCombo.singlesForPairs?.length || 0) + (mandatoryCombo.singlesFlexibleCount || 0);
     if (playedAnalysis.singles.length !== requiredSinglesTotal) {
+      console.log(`  ❌ 单张数量不匹配: 出了${playedAnalysis.singles.length}张单张，应出${requiredSinglesTotal}张单张`);
       return false;
     }
     
+    console.log('  ✅ 验证通过');
     return true;
   }
 
@@ -3038,8 +3384,8 @@ class ShandongUpgradeGame {
       const ranks = Array.from(rankSet);
       
       // 按索引排序
-      const order = [2, 3, 4, 5, 6, 7, 8, 9, 10, 'J', 'Q', 'K', 'A'];
-      const toIdx = (r) => order.indexOf(r);
+      const order = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A'];
+      const toIdx = (r) => order.indexOf(String(r));
       const sortedRanks = ranks.map(r => ({ rank: r, idx: toIdx(r) }))
                                 .filter(r => r.idx >= 0)
                                 .sort((a, b) => a.idx - b.idx);
@@ -3210,8 +3556,8 @@ class ShandongUpgradeGame {
 
   // 检查指定单位是否会被其他玩家压过
   canBeBeatenByOthers(unit, unitType, playerId) {
-    // 获取其他三家玩家的手牌
-    const otherPlayers = this.players.filter(p => p.id !== playerId);
+    // 获取其他三家玩家的手牌（使用position而不是id）
+    const otherPlayers = this.players.filter(p => p.position !== playerId);
     
     for (const player of otherPlayers) {
       if (this.canPlayerBeatUnit(player, unit, unitType)) {
@@ -3315,7 +3661,8 @@ class ShandongUpgradeGame {
     const unitPairCount = unit.length / 2;
     const unitMaxValue = Math.max(...unit.map(card => CardTypeValidator.getCardValue(card, this.currentLevel, this.trumpSuit)));
     const unitIsTrump = CardTypeValidator.isCardTrump(unit[0], this.currentLevel, this.trumpSuit);
-    console.log(`  🔍 连对: ${unitPairCount}对, 最大牌值: ${unitMaxValue}, 主牌: ${unitIsTrump}`);
+    const unitSuit = unit[0].suit;
+    console.log(`  🔍 连对: ${unitPairCount}对, 最大牌值: ${unitMaxValue}, 主牌: ${unitIsTrump}, 花色: ${unitSuit}`);
     
     // 连对必须相同对数才能比较，检查玩家是否有相同对数但更大的连对
     const playerSameCount = this.findConsecutivePairs(playerCards, unitPairCount);
@@ -3325,11 +3672,16 @@ class ShandongUpgradeGame {
       if (playerIsTrump !== unitIsTrump) {
         console.log(`  ⚠️ 主副牌类型不同，不能压过 (player:${playerIsTrump}, unit:${unitIsTrump})`);
       } else {
-        const playerMaxValue = Math.max(...playerSameCount.map(card => CardTypeValidator.getCardValue(card, this.currentLevel, this.trumpSuit)));
-        console.log(`  🔍 找到相同对数的连对，最大牌值: ${playerMaxValue}`);
-        if (playerMaxValue > unitMaxValue) {
-          console.log(`  ✅ 更大的连对 (${playerMaxValue} > ${unitMaxValue})`);
-          return true;
+        // 如果都是副牌，必须花色相同才能比较
+        if (!unitIsTrump && !playerIsTrump && playerSameCount[0].suit !== unitSuit) {
+          console.log(`  ⚠️ 副牌花色不同，不能压过 (player:${playerSameCount[0].suit}, unit:${unitSuit})`);
+        } else {
+          const playerMaxValue = Math.max(...playerSameCount.map(card => CardTypeValidator.getCardValue(card, this.currentLevel, this.trumpSuit)));
+          console.log(`  🔍 找到相同对数的连对，最大牌值: ${playerMaxValue}`);
+          if (playerMaxValue > unitMaxValue) {
+            console.log(`  ✅ 更大的连对 (${playerMaxValue} > ${unitMaxValue})`);
+            return true;
+          }
         }
       }
     }
@@ -3342,7 +3694,8 @@ class ShandongUpgradeGame {
   canBeatPair(playerCards, unit) {
     const unitValue = CardTypeValidator.getCardValue(unit[0], this.currentLevel, this.trumpSuit);
     const unitIsTrump = CardTypeValidator.isCardTrump(unit[0], this.currentLevel, this.trumpSuit);
-    console.log(`  🔍 对子牌值: ${unitValue} (${unit[0].suit}_${unit[0].rank}), 主牌: ${unitIsTrump}`);
+    const unitSuit = unit[0].suit;
+    console.log(`  🔍 对子牌值: ${unitValue} (${unitSuit}_${unit[0].rank}), 主牌: ${unitIsTrump}`);
     
     // 检查玩家是否有更大的对子
     const playerPairs = this.findPairs(playerCards);
@@ -3353,6 +3706,11 @@ class ShandongUpgradeGame {
       
       // 只有相同类型（都是主或都是副）才能比较
       if (pairIsTrump !== unitIsTrump) {
+        continue;
+      }
+      
+      // 如果都是副牌，必须花色相同才能比较
+      if (!unitIsTrump && !pairIsTrump && pair[0].suit !== unitSuit) {
         continue;
       }
       
@@ -3372,7 +3730,8 @@ class ShandongUpgradeGame {
   canBeatSingle(playerCards, unit) {
     const unitValue = CardTypeValidator.getCardValue(unit[0], this.currentLevel, this.trumpSuit);
     const unitIsTrump = CardTypeValidator.isCardTrump(unit[0], this.currentLevel, this.trumpSuit);
-    console.log(`  🔍 单张牌值: ${unitValue} (${unit[0].suit}_${unit[0].rank}), 主牌: ${unitIsTrump}`);
+    const unitSuit = unit[0].suit;
+    console.log(`  🔍 单张牌值: ${unitValue} (${unitSuit}_${unit[0].rank}), 主牌: ${unitIsTrump}`);
     
     // 检查玩家是否有更大的单张
     for (const card of playerCards) {
@@ -3380,6 +3739,11 @@ class ShandongUpgradeGame {
       
       // 只有相同类型（都是主或都是副）才能比较
       if (cardIsTrump !== unitIsTrump) {
+        continue;
+      }
+      
+      // 如果都是副牌，必须花色相同才能比较
+      if (!unitIsTrump && !cardIsTrump && card.suit !== unitSuit) {
         continue;
       }
       
@@ -3586,5 +3950,7 @@ class ShandongUpgradeGame {
     return foundCards;
   }
 }
+
+ShandongUpgradeGame.CardTypeValidator = CardTypeValidator;
 
 module.exports = ShandongUpgradeGame;

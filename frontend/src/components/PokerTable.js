@@ -281,10 +281,15 @@ const PokerTable = () => {
         setGameState(data.gameState);
         // 更新桌面显示的牌
         setPlayedCards(prev => {
+          // 对出牌进行排序，使其与手牌排序一致（从左到右从大到小）
+          const currentLevel = data.gameState?.currentLevel || gameState?.currentLevel || 2;
+          const trumpSuit = data.gameState?.trumpSuit || gameState?.trumpSuit;
+          const sortedCards = sortCards(data.cards, currentLevel, trumpSuit);
+          
           const newPlayed = [...prev, {
             playerId: data.playerId,
             playerName: data.playerName,
-            cards: data.cards
+            cards: sortedCards
           }];
           
           // 如果是轮次结束，显示等待信息
@@ -428,9 +433,47 @@ const PokerTable = () => {
 
       socketService.on('biddingTimeout', (data) => {
         console.log('⏰ 亮主时间结束:', data);
-        setGameMessage('⏰ 亮主时间结束，游戏结束（待修改）');
+        // 旧事件：兼容处理，优先使用 noBidFirstRound/noBidLaterRound
+        setGameMessage('⏰ 亮主时间结束');
         setGameState(data.gameState);
         setTrumpCountdown(null);
+      }, 'PokerTable');
+
+      // 无人叫主（首局）：提示并等待重新发牌
+      socketService.on('noBidFirstRound', (data) => {
+        console.log('⏰ 无人叫主（首局）:', data);
+        setGameMessage(data?.message || '⏰ 无人叫主，重新发牌');
+        // 清空到初始界面状态
+        setMyCards([]);
+        setSelectedCardIds([]);
+        setPlayedCards([]);
+        setStickOptions([]);
+        setStickExchange(null);
+        setSelectedExchangeCards([]);
+        setGameState(data?.gameState);
+        setTrumpCountdown(null);
+        setWaitingNext(false);
+        setNextReadyCount(0);
+        // 等待服务器重新发牌：会收到 dealingStarted/biddingStarted
+      }, 'PokerTable');
+
+      // 无人叫主（非首局）：提示闲家升三级并坐庄，然后等待重新发牌
+      socketService.on('noBidLaterRound', (data) => {
+        console.log('⏰ 无人叫主（非首局）:', data);
+        const { newLevel, newDealer } = data || {};
+        const msg = newLevel ? `⏰ 无人叫主，闲家升三级至${newLevel}并坐庄，重新发牌` : (data?.message || '⏰ 无人叫主，闲家升三级并坐庄，重新发牌');
+        setGameMessage(msg);
+        // 清空到初始界面状态
+        setMyCards([]);
+        setSelectedCardIds([]);
+        setPlayedCards([]);
+        setStickOptions([]);
+        setStickExchange(null);
+        setSelectedExchangeCards([]);
+        setGameState(data?.gameState);
+        setTrumpCountdown(null);
+        setWaitingNext(false);
+        setNextReadyCount(0);
       }, 'PokerTable');
 
       // 处理反主事件

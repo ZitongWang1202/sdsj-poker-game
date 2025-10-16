@@ -662,6 +662,26 @@ io.on('connection', (socket) => {
           });
         };
         
+        // 无人叫主：首局回调 -> 广播提示并重新启动发牌动画
+        room.game._onNoBidFirstRound = () => {
+          io.to(roomId).emit('noBidFirstRound', {
+            message: '⏰ 无人叫主，重新发牌',
+            gameState: room.game.getGameState()
+          });
+          setTimeout(() => startDealingAnimation(io, roomId, gameManager), 3000);
+        };
+
+        // 无人叫主：非首局回调 -> 广播新级别/新庄家并重新启动发牌动画
+        room.game._onNoBidLaterRound = ({ newLevel, newDealer }) => {
+          io.to(roomId).emit('noBidLaterRound', {
+            message: '⏰ 无人叫主，闲家升三级并坐庄，重新发牌',
+            newLevel,
+            newDealer,
+            gameState: room.game.getGameState()
+          });
+          setTimeout(() => startDealingAnimation(io, roomId, gameManager), 3000);
+        };
+
         // 设置摸底阶段进入回调
         room.game._onBottomPhaseEntered = () => {
           const gameState = room.game.getGameState();
@@ -726,6 +746,23 @@ io.on('connection', (socket) => {
       nextGame.isFirstRound = false;
       room.game = nextGame;
       room.gameStarted = true;
+      // 注册无人叫主回调（用于下一局）
+      room.game._onNoBidFirstRound = () => {
+        io.to(roomId).emit('noBidFirstRound', {
+          message: '⏰ 无人叫主，重新发牌',
+          gameState: room.game.getGameState()
+        });
+        setTimeout(() => startDealingAnimation(io, roomId, gameManager), 3000);
+      };
+      room.game._onNoBidLaterRound = ({ newLevel, newDealer }) => {
+        io.to(roomId).emit('noBidLaterRound', {
+          message: '⏰ 无人叫主，闲家升三级并坐庄，重新发牌',
+          newLevel,
+          newDealer,
+          gameState: room.game.getGameState()
+        });
+        setTimeout(() => startDealingAnimation(io, roomId, gameManager), 3000);
+      };
       // 清空等待集合
       room.nextGameReady = new Set();
       // 广播进入发牌动画
