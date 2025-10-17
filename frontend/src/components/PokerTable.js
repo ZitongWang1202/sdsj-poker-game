@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import socketService from '../services/socketService';
-import { sortCards, getCardDisplayName, identifyCardType } from '../utils/cardUtils';
+import { sortCards, getCardDisplayName, identifyCardType, isCardTrump } from '../utils/cardUtils';
 import { validateFollowCards } from '../utils/followValidation';
 import HandCards from './HandCards';
 import { getCardBackPath, getCardImagePath } from '../utils/cardAssets';
@@ -893,6 +893,99 @@ const PokerTable = () => {
     setSelectedCardIds([]);
   };
 
+  // 判断跟牌类型
+  const getFollowType = (selectedCardObjects, leadCard) => {
+    if (!leadCard || !leadCard.cards || selectedCardObjects.length === 0) {
+      return '出牌';
+    }
+
+    const leadCards = leadCard.cards;
+    const currentLevel = gameState?.currentLevel || 2;
+    const trumpSuit = gameState?.trumpSuit;
+
+    // 获取领出花色
+    const getLeadSuit = (cards) => {
+      if (cards.length === 0) return null;
+      const firstCard = cards[0];
+      if (isCardTrump(firstCard, currentLevel, trumpSuit)) {
+        return 'trump';
+      }
+      return firstCard.suit;
+    };
+
+    // 检查是否为副牌
+    const isNonTrumpCard = (card) => {
+      return !isCardTrump(card, currentLevel, trumpSuit);
+    };
+
+    // 获取牌值（用于比较大小）
+    const getCardValue = (card) => {
+      // 简化的牌值计算，实际应该更复杂
+      const rankValues = {
+        '2': 2, '3': 3, '4': 4, '5': 5, '6': 6, '7': 7, '8': 8, '9': 9, '10': 10,
+        'J': 11, 'Q': 12, 'K': 13, 'A': 14, 'JOKER': 15
+      };
+      return rankValues[card.rank] || 0;
+    };
+
+    const leadSuit = getLeadSuit(leadCards);
+    const isLeadNonTrump = leadSuit !== 'trump';
+
+    // 检查跟牌中是否有主牌
+    const hasTrumpInFollow = selectedCardObjects.some(card => 
+      isCardTrump(card, currentLevel, trumpSuit)
+    );
+
+    // 检查跟牌中是否有副牌
+    const hasNonTrumpInFollow = selectedCardObjects.some(card => 
+      isNonTrumpCard(card)
+    );
+
+    // 检查是否全部跟了领出花色
+    const isAllLeadSuit = selectedCardObjects.every(card => {
+      if (leadSuit === 'trump') {
+        return isCardTrump(card, currentLevel, trumpSuit);
+      } else {
+        return card.suit === leadSuit && isNonTrumpCard(card);
+      }
+    });
+
+    // 检查是否全部是主牌
+    const isAllTrump = selectedCardObjects.every(card => 
+      isCardTrump(card, currentLevel, trumpSuit)
+    );
+
+    // 检查当前轮次中是否有人已经杀牌
+    const hasKillInRound = playedCards.some(playedCard => {
+      if (playedCard.playerId === gameState?.currentTurn) return false; // 排除自己
+      const playedCardObjects = playedCard.cards || [];
+      if (playedCardObjects.length === 0) return false;
+      
+      // 检查是否有人用主牌杀副牌
+      const playedLeadSuit = getLeadSuit(leadCards);
+      const isPlayedAllTrump = playedCardObjects.every(card => 
+        isCardTrump(card, currentLevel, trumpSuit)
+      );
+      const isPlayedKill = playedLeadSuit !== 'trump' && isPlayedAllTrump;
+      
+      return isPlayedKill;
+    });
+
+    // 判断跟牌类型
+    if (isAllLeadSuit) {
+      return '跟牌';
+    } else if (isLeadNonTrump && isAllTrump && !hasKillInRound) {
+      // 领出副牌，跟牌全部是主牌，且前面没人杀牌 = 杀牌
+      return '杀牌';
+    } else if (isLeadNonTrump && isAllTrump && hasKillInRound) {
+      // 领出副牌，跟牌全部是主牌，且前面有人杀牌 = 超杀
+      return '超杀';
+    } else {
+      // 其他所有情况 = 垫牌
+      return '垫牌';
+    }
+  };
+
   // 验证并识别出牌牌型
   const validatePlayCards = (selectedIds) => {
     if (selectedIds.length === 0) {
@@ -907,7 +1000,7 @@ const PokerTable = () => {
       gameState?.trumpSuit
     );
 
-    // 如果是跟牌场景，优先用“跟牌规则”判断是否允许垫牌
+    // 如果是跟牌场景，优先用"跟牌规则"判断是否允许垫牌
     if (playedCards.length > 0) {
       const followValidation = validateFollowCards(
         selectedCardObjects,
@@ -925,10 +1018,11 @@ const PokerTable = () => {
         };
       }
 
-      // 跟牌校验通过：允许“无牌可跟时的垫牌”，不因牌型未知而拦截
+      // 跟牌校验通过：允许"无牌可跟时的垫牌"，不因牌型未知而拦截
+      const followType = getFollowType(selectedCardObjects, playedCards[0]);
       const safeType = rawType.type === 'invalid'
-        ? { type: 'follow', name: '跟牌', cards: selectedCardObjects, message: '跟牌' }
-        : rawType;
+        ? { type: 'follow', name: followType, cards: selectedCardObjects, message: followType }
+        : { ...rawType, name: followType };
 
       return {
         valid: true,

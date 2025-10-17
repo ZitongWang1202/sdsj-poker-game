@@ -175,11 +175,16 @@ class CardTypeValidator {
     
     // 检查是否相同点数
     if (card1.rank === card2.rank) {
-      return { 
-        valid: true, 
-        rank: card1.rank,
-        isTrumpPair: this.isCardTrump(card1, currentLevel, trumpSuit)
-      };
+      // 对子需要点数相同且花色相同（两幅牌的完全相同牌）
+      if (card1.suit === card2.suit) {
+        return { 
+          valid: true, 
+          rank: card1.rank,
+          isTrumpPair: this.isCardTrump(card1, currentLevel, trumpSuit)
+        };
+      } else {
+        return { valid: false };
+      }
     }
     
     return { valid: false };
@@ -2659,17 +2664,17 @@ class ShandongUpgradeGame {
     return this.compareSuitCards(card1, card2, leadSuit);
   }
 
-  // 判断是否为“合格主杀”：
+  // 判断是否为"合格主杀"：
   // 1) 全是主牌；2) 与领出牌型相同；3) 数量相同。
   isQualifiedTrumpKill(cardGroup, leadType) {
-    // 领出为主牌时，不适用“主杀”概念；直接按原有主牌比较
+    // 领出为主牌时，不适用"主杀"概念；直接按原有主牌比较
     const leadIsTrump = leadType && leadType.cards && leadType.cards.length > 0 &&
       this.isCardGroupTrump(leadType.cards);
     if (leadIsTrump) {
       return this.isCardGroupTrump(cardGroup.cards);
     }
 
-    // 领出为副牌时，必须满足“合格主杀”条件
+    // 领出为副牌时，必须满足"合格主杀"条件
     const isGroupTrump = this.isCardGroupTrump(cardGroup.cards);
     if (!isGroupTrump) return false;
 
@@ -2677,9 +2682,146 @@ class ShandongUpgradeGame {
     if (!leadType || cardGroup.cards.length !== this.roundCards[0].cards.length) return false;
 
     // 牌型一致
-    return cardGroup.cardType && leadType.type === cardGroup.cardType.type;
+    const typesMatch = cardGroup.cardType && leadType.type === cardGroup.cardType.type;
+    if (!typesMatch) return false;
+    
+    // 如果是甩牌（mixed），需要进一步检查具体组成是否匹配
+    if (leadType.type === 'mixed') {
+      return this.isMixedComboMatching(cardGroup.cards, leadType.cards);
+    }
+    
+    return true;
   }
 
+  // 辅助函数：找出连对中的最大牌值
+  findMaxConsecutivePairValue(analysis) {
+    if (!analysis.pairs || analysis.pairs.length < 2) return 0;
+    
+    // 对所有对子按牌值排序
+    const sortedPairs = analysis.pairs.map(pair => {
+      const value = CardTypeValidator.getCardValue(pair[0], this.currentLevel, this.trumpSuit);
+      return { pair, value };
+    }).sort((a, b) => b.value - a.value);
+    
+    // 找出最大的连对
+    for (let i = 0; i < sortedPairs.length - 1; i++) {
+      const diff = sortedPairs[i].value - sortedPairs[i + 1].value;
+      if (diff === 1) {
+        // 找到连对，返回最大值
+        return sortedPairs[i].value;
+      }
+    }
+    
+    // 如果没有连对，返回最大对子的值
+    return sortedPairs[0]?.value || 0;
+  }
+  
+  // 辅助函数：找出闪/震中的最大牌值
+  findMaxFlashThunderValue(analysis) {
+    // 闪/震是4张或更多同点数的主牌
+    // 从所有牌中找出出现4次或更多的点数
+    const cardCounts = {};
+    const allCards = [...(analysis.pairs?.flat() || []), ...(analysis.singles || [])];
+    
+    allCards.forEach(card => {
+      const key = `${card.rank}`;
+      if (!cardCounts[key]) {
+        cardCounts[key] = { count: 0, card };
+      }
+      cardCounts[key].count++;
+    });
+    
+    // 找出最大的闪/震
+    let maxValue = 0;
+    Object.values(cardCounts).forEach(({ count, card }) => {
+      if (count >= 4) {
+        const value = CardTypeValidator.getCardValue(card, this.currentLevel, this.trumpSuit);
+        if (value > maxValue) {
+          maxValue = value;
+        }
+      }
+    });
+    
+    return maxValue;
+  }
+  
+  // 辅助函数：找出顺子中的最大牌值
+  findMaxStraightValue(analysis) {
+    // 顺子是5张或更多连续的牌
+    const allCards = [...(analysis.pairs?.flat() || []), ...(analysis.singles || [])];
+    if (allCards.length < 5) return 0;
+    
+    // 获取所有牌的牌值并排序
+    const values = allCards.map(card => 
+      CardTypeValidator.getCardValue(card, this.currentLevel, this.trumpSuit)
+    ).sort((a, b) => b - a);
+    
+    // 检查是否有连续的5张或更多
+    let consecutive = 1;
+    let maxInStraight = values[0];
+    
+    for (let i = 1; i < values.length; i++) {
+      if (values[i - 1] - values[i] === 1) {
+        consecutive++;
+        if (consecutive >= 5) {
+          // 找到顺子，返回最大值
+          return maxInStraight;
+        }
+      } else {
+        consecutive = 1;
+        maxInStraight = values[i];
+      }
+    }
+    
+    return values[0]; // 回退到最大牌值
+  }
+  
+  // 检查甩牌（mixed）组成是否匹配
+  // 必须：对子数相同、连对能力相同、单张数相同
+  isMixedComboMatching(followCards, leadCards) {
+    console.log('\n🔍 检查甩牌组成是否匹配:');
+    console.log('  领出:', leadCards.map(c => `${c.suit}_${c.rank}`).join(', '));
+    console.log('  跟牌:', followCards.map(c => `${c.suit}_${c.rank}`).join(', '));
+    
+    const leadAnalysis = this.analyzeMixedCards(leadCards);
+    const followAnalysis = this.analyzeMixedCards(followCards);
+    
+    console.log('  领出分析:', {
+      pairs: leadAnalysis.pairs.length,
+      singles: leadAnalysis.singles.length,
+      consecutivePairsPairs: leadAnalysis.capabilities.consecutivePairsPairs,
+      straightCount: leadAnalysis.capabilities.straightCount,
+      flashThunderCount: leadAnalysis.capabilities.flashThunderCount
+    });
+    console.log('  跟牌分析:', {
+      pairs: followAnalysis.pairs.length,
+      singles: followAnalysis.singles.length,
+      consecutivePairsPairs: followAnalysis.capabilities.consecutivePairsPairs,
+      straightCount: followAnalysis.capabilities.straightCount,
+      flashThunderCount: followAnalysis.capabilities.flashThunderCount
+    });
+    
+    // 检查基本组成
+    const pairsMatch = leadAnalysis.pairs.length === followAnalysis.pairs.length;
+    const singlesMatch = leadAnalysis.singles.length === followAnalysis.singles.length;
+    const consecPairsMatch = leadAnalysis.capabilities.consecutivePairsPairs === followAnalysis.capabilities.consecutivePairsPairs;
+    const straightMatch = leadAnalysis.capabilities.straightCount === followAnalysis.capabilities.straightCount;
+    const flashThunderMatch = leadAnalysis.capabilities.flashThunderCount === followAnalysis.capabilities.flashThunderCount;
+    
+    const isMatch = pairsMatch && singlesMatch && consecPairsMatch && straightMatch && flashThunderMatch;
+    
+    console.log('  匹配结果:', {
+      pairsMatch,
+      singlesMatch,
+      consecPairsMatch,
+      straightMatch,
+      flashThunderMatch,
+      isMatch
+    });
+    
+    return isMatch;
+  }
+  
   // 检查一组牌是否都是主牌
   isCardGroupTrump(cards) {
     return cards.every(card => 
@@ -2706,27 +2848,37 @@ class ShandongUpgradeGame {
       const a = this.analyzeMixedCards(card1.cards);
       const b = this.analyzeMixedCards(card2.cards);
 
-      // 计算混合牌的“最高优先单位”及其强度
+      // 计算混合牌的"最高优先单位"及其强度
+      // 优先级：雨 > 闪 > 震 > 连对 > 对子 > 单牌
       const getHighestUnitScore = (analysis) => {
-        // 1) 闪/震：按可用张数比较（>4 为震，4 为闪）
-        if ((analysis.capabilities?.flashThunderCount || 0) > 0) {
-          return { category: 'flash_thunder', score: analysis.capabilities.flashThunderCount };
-        }
-        // 2) 顺子：按最长顺子张数比较
+        // 1) 雨（顺子）：最高优先级，按最大牌值比较
         if ((analysis.capabilities?.straightCount || 0) >= 5) {
-          return { category: 'straight', score: analysis.capabilities.straightCount };
+          // 找出顺子中的所有牌并计算最大牌值
+          const maxStraight = this.findMaxStraightValue(analysis);
+          return { category: 'straight', score: maxStraight };
         }
-        // 3) 连对：按可组成的连续对数比较
-        if ((analysis.capabilities?.consecutivePairsPairs || 0) > 0) {
-          return { category: 'consecutive_pairs', score: analysis.capabilities.consecutivePairsPairs };
+        // 2) 闪：4张同点数主牌
+        if ((analysis.capabilities?.flashThunderCount || 0) === 4) {
+          const maxFlash = this.findMaxFlashThunderValue(analysis);
+          return { category: 'flash', score: maxFlash };
         }
-        // 4) 对子：按最大对子牌力比较
+        // 3) 震：>4张同点数主牌
+        if ((analysis.capabilities?.flashThunderCount || 0) > 4) {
+          const maxThunder = this.findMaxFlashThunderValue(analysis);
+          return { category: 'thunder', score: maxThunder };
+        }
+        // 4) 连对：按最大连对牌值比较
+        if ((analysis.capabilities?.consecutivePairsPairs || 0) >= 2) {
+          const maxConsecPair = this.findMaxConsecutivePairValue(analysis);
+          return { category: 'consecutive_pairs', score: maxConsecPair };
+        }
+        // 5) 对子：按最大对子牌力比较
         if (analysis.pairs && analysis.pairs.length > 0) {
           const flat = analysis.pairs.flat();
           const maxPair = Math.max(...flat.map(c => CardTypeValidator.getCardValue(c, this.currentLevel, this.trumpSuit)));
           return { category: 'pair', score: maxPair };
         }
-        // 5) 单张：按最大单张牌力比较
+        // 6) 单张：按最大单张牌力比较
         if (analysis.singles && analysis.singles.length > 0) {
           const maxSingle = Math.max(...analysis.singles.map(c => CardTypeValidator.getCardValue(c, this.currentLevel, this.trumpSuit)));
           return { category: 'single', score: maxSingle };

@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>跟牌类型测试</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test-case { margin: 10px 0; padding: 10px; border: 1px solid #ccc; }
+        .result { font-weight: bold; color: #0066cc; }
+    </style>
+</head>
+<body>
+    <h1>跟牌类型判断测试</h1>
+    
+    <div class="test-case">
+        <h3>测试1：全部跟牌（同花色）</h3>
+        <p>领出：红桃A、红桃K</p>
+        <p>跟牌：红桃Q、红桃J</p>
+        <p class="result">预期结果：跟牌</p>
+    </div>
+    
+    <div class="test-case">
+        <h3>测试2：杀牌（副牌用主牌杀）</h3>
+        <p>领出：红桃A、红桃K（副牌）</p>
+        <p>跟牌：黑桃A、黑桃K（主牌）</p>
+        <p class="result">预期结果：杀牌</p>
+    </div>
+    
+    <div class="test-case">
+        <h3>测试3：超杀（前面有人杀牌后，用更大主牌超杀）</h3>
+        <p>领出：红桃A、红桃K（副牌）</p>
+        <p>前面玩家：黑桃A、黑桃K（杀牌）</p>
+        <p>跟牌：大王、黑桃8（更大的主牌）</p>
+        <p class="result">预期结果：超杀</p>
+    </div>
+    
+    <div class="test-case">
+        <h3>测试4：垫牌（有人杀牌后，非超杀情况）</h3>
+        <p>领出：红桃A、红桃K（副牌）</p>
+        <p>前面玩家：黑桃A、黑桃K（杀牌）</p>
+        <p>跟牌：红桃Q、梅花J（副牌+副牌）</p>
+        <p class="result">预期结果：垫牌</p>
+    </div>
+    
+    <div class="test-case">
+        <h3>测试5：垫牌（部分跟花色）</h3>
+        <p>领出：红桃A、红桃K</p>
+        <p>跟牌：红桃Q、梅花J（同花色+不同花色）</p>
+        <p class="result">预期结果：垫牌</p>
+    </div>
+    
+    <div class="test-case">
+        <h3>测试6：垫牌（完全不跟花色）</h3>
+        <p>领出：红桃A、红桃K</p>
+        <p>跟牌：梅花Q、方块J（完全不同的花色）</p>
+        <p class="result">预期结果：垫牌</p>
+    </div>
+    
+    <div class="test-case">
+        <h3>测试7：主牌跟主牌</h3>
+        <p>领出：黑桃A、黑桃K（主牌）</p>
+        <p>跟牌：黑桃Q、黑桃J（主牌）</p>
+        <p class="result">预期结果：跟牌</p>
+    </div>
+    
+    <script>
+        // 模拟跟牌类型判断逻辑
+        function getFollowType(selectedCards, leadCards, currentLevel = 2, trumpSuit = 'spades') {
+            if (!leadCards || leadCards.length === 0 || selectedCards.length === 0) {
+                return '出牌';
+            }
+
+            // 简化的主牌判断（实际应该更复杂）
+            const isCardTrump = (card) => {
+                return card.suit === trumpSuit || card.rank === '2' || card.rank === '3' || card.rank === '5' || card.rank === 'JOKER';
+            };
+
+            const isNonTrumpCard = (card) => !isCardTrump(card);
+
+            // 获取领出花色
+            const getLeadSuit = (cards) => {
+                if (cards.length === 0) return null;
+                const firstCard = cards[0];
+                if (isCardTrump(firstCard)) {
+                    return 'trump';
+                }
+                return firstCard.suit;
+            };
+
+            const leadSuit = getLeadSuit(leadCards);
+            const isLeadNonTrump = leadSuit !== 'trump';
+
+            // 检查跟牌中是否有主牌
+            const hasTrumpInFollow = selectedCards.some(card => isCardTrump(card));
+            const hasNonTrumpInFollow = selectedCards.some(card => isNonTrumpCard(card));
+
+            // 检查是否全部跟了领出花色
+            const isAllLeadSuit = selectedCards.every(card => {
+                if (leadSuit === 'trump') {
+                    return isCardTrump(card);
+                } else {
+                    return card.suit === leadSuit && isNonTrumpCard(card);
+                }
+            });
+
+            // 检查是否部分跟了领出花色
+            const isPartialLeadSuit = selectedCards.some(card => {
+                if (leadSuit === 'trump') {
+                    return isCardTrump(card);
+                } else {
+                    return card.suit === leadSuit && isNonTrumpCard(card);
+                }
+            });
+
+            // 判断跟牌类型
+            if (isAllLeadSuit) {
+                return '跟牌';
+            } else if (isLeadNonTrump && hasTrumpInFollow && !hasNonTrumpInFollow) {
+                return '杀牌';
+            } else if (isLeadNonTrump && hasTrumpInFollow && hasNonTrumpInFollow) {
+                return '超杀';
+            } else if (isPartialLeadSuit) {
+                return '垫牌';
+            } else {
+                return '垫牌';
+            }
+        }
+
+        // 测试用例
+        const testCases = [
+            {
+                name: "全部跟牌（同花色）",
+                lead: [{suit: 'hearts', rank: 'A'}, {suit: 'hearts', rank: 'K'}],
+                follow: [{suit: 'hearts', rank: 'Q'}, {suit: 'hearts', rank: 'J'}],
+                expected: "跟牌"
+            },
+            {
+                name: "杀牌（副牌用主牌杀）",
+                lead: [{suit: 'hearts', rank: 'A'}, {suit: 'hearts', rank: 'K'}],
+                follow: [{suit: 'spades', rank: 'A'}, {suit: 'spades', rank: 'K'}],
+                expected: "杀牌"
+            },
+            {
+                name: "超杀（混合主副牌）",
+                lead: [{suit: 'hearts', rank: 'A'}, {suit: 'hearts', rank: 'K'}],
+                follow: [{suit: 'spades', rank: 'A'}, {suit: 'hearts', rank: 'Q'}],
+                expected: "超杀"
+            },
+            {
+                name: "垫牌（部分跟花色）",
+                lead: [{suit: 'hearts', rank: 'A'}, {suit: 'hearts', rank: 'K'}],
+                follow: [{suit: 'hearts', rank: 'Q'}, {suit: 'clubs', rank: 'J'}],
+                expected: "垫牌"
+            },
+            {
+                name: "垫牌（完全不跟花色）",
+                lead: [{suit: 'hearts', rank: 'A'}, {suit: 'hearts', rank: 'K'}],
+                follow: [{suit: 'clubs', rank: 'Q'}, {suit: 'diamonds', rank: 'J'}],
+                expected: "垫牌"
+            },
+            {
+                name: "主牌跟主牌",
+                lead: [{suit: 'spades', rank: 'A'}, {suit: 'spades', rank: 'K'}],
+                follow: [{suit: 'spades', rank: 'Q'}, {suit: 'spades', rank: 'J'}],
+                expected: "跟牌"
+            }
+        ];
+
+        console.log("跟牌类型判断测试结果：");
+        testCases.forEach((test, index) => {
+            const result = getFollowType(test.follow, test.lead);
+            const passed = result === test.expected;
+            console.log(`测试${index + 1} (${test.name}): ${result} ${passed ? '✅' : '❌'}`);
+        });
+    </script>
+</body>
+</html>
