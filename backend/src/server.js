@@ -487,11 +487,16 @@ io.on('connection', (socket) => {
           const winnerPlayer = room.players[roundWinner];
           const gameState = room.game.getGameState();
           
+          // 如果游戏已结束（最后一手），将底牌一起返回给前端，便于提前展示
+          const gameStateWithBottom = gameState.gamePhase === 'finished'
+            ? { ...gameState, bottomCards: room.game.bottomCards }
+            : gameState;
+
           // 通知轮次结束
           io.to(roomId).emit('roundComplete', {
             winner: roundWinner,
             winnerName: winnerPlayer ? winnerPlayer.name : `玩家${roundWinner + 1}`,
-            gameState: gameState
+            gameState: gameStateWithBottom
           });
           
           console.log(`🏆 轮次结束，获胜者: ${winnerPlayer ? winnerPlayer.name : `玩家${roundWinner + 1}`}`);
@@ -507,20 +512,33 @@ io.on('connection', (socket) => {
             }, 2000);
           } else {
             // 游戏结束，延迟发送最终结果
+            const finalResult = result.finalResult || room.game.calculateFinalResults();
             setTimeout(() => {
               io.to(roomId).emit('gameFinished', {
-                finalResult: result.finalResult || room.game.calculateFinalResults(),
+                finalResult: finalResult,
                 gameState: gameState
               });
             }, 3000);
-            // 进入等待下一局：向所有客户端广播readyForNextGame
-            setTimeout(() => {
-              const r = gameManager.getRoom(roomId);
-              if (!r || !r.game) return;
-              r.nextGameReady = new Set();
-              r.nextGameContext = (result.finalResult || r.game.calculateFinalResults());
-              io.to(roomId).emit('readyForNextGame', { finalResult: r.nextGameContext });
-            }, 5000);
+            
+            // 检查是否游戏胜利（升到A级）
+            if (finalResult.isGameWon) {
+              // 游戏胜利，不进入下一局，发送游戏完全结束事件
+              setTimeout(() => {
+                io.to(roomId).emit('gameCompletelyFinished', {
+                  finalResult: finalResult,
+                  message: '🎉 游戏胜利！一队已过A级，游戏结束！'
+                });
+              }, 5000);
+            } else {
+              // 进入等待下一局：向所有客户端广播readyForNextGame
+              setTimeout(() => {
+                const r = gameManager.getRoom(roomId);
+                if (!r || !r.game) return;
+                r.nextGameReady = new Set();
+                r.nextGameContext = finalResult;
+                io.to(roomId).emit('readyForNextGame', { finalResult: r.nextGameContext });
+              }, 5000);
+            }
           }
         }, 1000);
       }

@@ -43,6 +43,131 @@
   backdrop-filter: blur(5px);
 }
 
+/* 可点击的级牌信息 */
+.level-info.clickable {
+  cursor: pointer;
+  text-decoration: underline dotted rgba(255,255,255,0.6);
+}
+.level-info.clickable:hover {
+  opacity: 0.9;
+}
+
+/* 可点击的闲家得分信息 */
+.idle-score-info.clickable {
+  cursor: pointer;
+  text-decoration: underline dotted rgba(255,255,255,0.6);
+}
+.idle-score-info.clickable:hover {
+  opacity: 0.9;
+}
+
+/* 级别信息弹层 */
+.level-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.level-modal {
+  background: rgba(20, 20, 20, 0.95);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  width: 520px;
+  max-width: 90vw;
+  color: #fff;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.6);
+}
+
+.level-modal-header {
+  padding: 14px 18px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-weight: 600;
+}
+
+.level-modal-close {
+  background: transparent;
+  border: none;
+  color: #fff;
+  font-size: 20px;
+  cursor: pointer;
+}
+
+.level-modal-body {
+  padding: 16px 18px 20px;
+}
+
+.level-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  margin-bottom: 10px;
+}
+
+.level-row.active {
+  background: rgba(255, 215, 0, 0.12);
+  border: 1px solid rgba(255, 215, 0, 0.35);
+}
+
+.level-side {
+  font-weight: 500;
+}
+
+.level-value {
+  color: #ffd700;
+}
+
+.level-hint {
+  margin-top: 6px;
+  font-size: 13px;
+  color: rgba(255,255,255,0.75);
+}
+
+/* 得分规则弹层样式 */
+.score-rules-section {
+  margin-bottom: 20px;
+}
+
+.score-rules-section h4 {
+  margin: 0 0 12px 0;
+  color: #ffd700;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.score-rule-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  margin-bottom: 6px;
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 6px;
+  border-left: 3px solid rgba(255, 215, 0, 0.3);
+}
+
+.score-range {
+  font-weight: 500;
+  color: #fff;
+}
+
+.score-result {
+  color: #ffd700;
+  font-weight: 600;
+}
+
 .level-info {
   background: rgba(0, 191, 255, 0.2);
   border: 1px solid rgba(0, 191, 255, 0.3);
@@ -252,6 +377,46 @@
   text-align: center;
 }
 
+/* 底牌显示样式 */
+.bottom-cards-display {
+  position: absolute;
+  bottom: 20px;
+  right: 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  z-index: 20;
+}
+
+.bottom-cards-label {
+  font-size: 12px;
+  color: #ffd700;
+  background: rgba(0, 0, 0, 0.8);
+  padding: 4px 8px;
+  border-radius: 8px;
+  font-weight: 600;
+  border: 1px solid rgba(255, 215, 0, 0.3);
+}
+
+.bottom-cards-group {
+  display: flex;
+  gap: 3px;
+  align-items: center;
+}
+
+.bottom-card {
+  position: relative;
+}
+
+.bottom-card-image {
+  width: 35px;
+  height: auto;
+  border-radius: 4px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(255, 215, 0, 0.5);
+}
+
 .played-card {
   width: 40px;
   height: 56px;
@@ -303,14 +468,14 @@
 
 /* 准备面板中的按钮继承全局样式，只保留特殊状态 */
 
-/* 开始游戏按钮 - 白色 */
-.ready-panel .action-btn:last-child {
+/* 开始游戏按钮 - 白色（仅限带 start-btn 类） */
+.ready-panel .action-btn.start-btn {
   background: linear-gradient(135deg, #f5f5f5 0%, #ffffff 100%);
   color: #000;
   box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
 }
 
-.ready-panel .action-btn:last-child:hover {
+.ready-panel .action-btn.start-btn:hover {
   transform: scale(1.05);
   box-shadow: 0 5px 15px rgba(0, 0, 0, 0.4);
 }

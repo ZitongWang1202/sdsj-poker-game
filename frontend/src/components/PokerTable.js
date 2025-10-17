@@ -29,6 +29,8 @@ const PokerTable = () => {
   const [initialReadyCount, setInitialReadyCount] = useState(0); // 初始准备已就绪人数
   const [isInitialReady, setIsInitialReady] = useState(false); // 我是否已初始准备
   const [isNextReady, setIsNextReady] = useState(false); // 我是否已准备下一局
+  const [showLevelInfo, setShowLevelInfo] = useState(false); // 是否显示级别信息弹层
+  const [showScoreRules, setShowScoreRules] = useState(false); // 是否显示得分规则弹层
   const [idleScoreAnimating, setIdleScoreAnimating] = useState(false); // 闲家得分动画状态
 
   // 监听游戏状态变化，重新计算粘主选项
@@ -304,7 +306,17 @@ const PokerTable = () => {
       socketService.on('roundComplete', (data) => {
         console.log('🏆 收到轮次结束事件:', data);
         setGameMessage(`🏆 ${data.winnerName} 获胜！`);
-        setGameState(data.gameState);
+        // 若服务端已判定本局结束且附带了 bottomCards，则提前合并到底部展示
+        if (data?.gameState?.gamePhase === 'finished') {
+          setGameState(prev => ({
+            ...prev,
+            ...(data.gameState || {}),
+            gamePhase: 'finished',
+            bottomCards: data.gameState.bottomCards || prev?.bottomCards || []
+          }));
+        } else {
+          setGameState(data.gameState);
+        }
       }, 'PokerTable');
 
       socketService.on('newRoundStarted', (data) => {
@@ -320,18 +332,74 @@ const PokerTable = () => {
       socketService.on('gameFinished', (data) => {
         console.log('🎉 收到本局结束事件:', data);
         const fr = data.finalResult;
-        const desc = fr?.description || '本局结束';
-        const levelInfo = fr?.newLevel ? ` 新级别：${fr.newLevel}` : '';
-        setGameMessage(`🎉 ${desc}${levelInfo}`);
-        setGameState(data.gameState);
+        
+        // 构建详细的游戏结果提示
+        let resultMessage = '🎉 本局结束';
+        if (fr?.description) {
+          resultMessage = `🎉 ${fr.description}`;
+        }
+        
+        // 添加升级信息
+        if (fr?.levelChange && fr.levelChange > 0) {
+          resultMessage += `，升${fr.levelChange}级`;
+        }
+        
+        // 添加新级别信息
+        if (fr?.newLevel) {
+          resultMessage += `，新级别：${fr.newLevel}`;
+        }
+        
+        // 添加胜利方信息
+        if (fr?.status) {
+          if (fr.status.includes('dealer')) {
+            resultMessage += '，庄家队胜利';
+          } else if (fr.status.includes('idle')) {
+            resultMessage += '，闲家队胜利';
+          }
+        }
+        
+        // 检查是否游戏胜利（升到A级）
+        if (fr?.isGameWon) {
+          resultMessage += '，游戏胜利！';
+        }
+        
+        setGameMessage(resultMessage);
+        
+        // 合并最终结果，确保包含 bottomCards 且阶段为 finished
+        setGameState(prev => ({
+          ...prev,
+          ...(data.gameState || {}),
+          gamePhase: 'finished',
+          bottomCards: fr?.bottomCards || data.gameState?.bottomCards || prev?.bottomCards || [],
+          currentLevel: fr?.currentLevel ?? prev?.currentLevel,
+          team0Level: fr?.team0Level ?? prev?.team0Level,
+          team1Level: fr?.team1Level ?? prev?.team1Level,
+          dealer: fr?.dealer ?? prev?.dealer
+        }));
         setPlayedCards([]);
         setSelectedCardIds([]);
+      }, 'PokerTable');
+
+      // 游戏完全结束（A级胜利）
+      socketService.on('gameCompletelyFinished', (data) => {
+        console.log('🏆 游戏完全结束:', data);
+        setGameMessage(data.message || '🎉 游戏胜利！一队已过A级，游戏结束！');
+        setGameState(prev => ({
+          ...prev,
+          ...(data.finalResult || {}),
+          gamePhase: 'completely_finished'
+        }));
+        setPlayedCards([]);
+        setSelectedCardIds([]);
+        setWaitingNext(false);
+        setWaitingInitialReady(false);
       }, 'PokerTable');
 
       // 进入"等待初始准备"阶段
       socketService.on('waitingInitialReady', (data) => {
         console.log('⏳ 等待初始准备:', data);
-        setGameMessage(data.message || '⏳ 等待所有玩家准备开始游戏');
+        setGameMessage(data.message || '⏳ 等待所有玩家点击准备按钮');
+        setGameMessage(data.message || '⏳ 等待所有玩家点击准备按钮');
         setInitialReadyCount(0);
         setIsInitialReady(false);
         setWaitingInitialReady(true);
@@ -369,6 +437,17 @@ const PokerTable = () => {
         setNextReadyCount(0);
         setIsNextReady(false);
         setWaitingNext(true);
+        
+        // 更新游戏状态，确保级别信息正确
+        if (data.finalResult) {
+          setGameState(prev => ({
+            ...prev,
+            currentLevel: data.finalResult.currentLevel ?? prev?.currentLevel,
+            team0Level: data.finalResult.team0Level ?? prev?.team0Level,
+            team1Level: data.finalResult.team1Level ?? prev?.team1Level,
+            dealer: data.finalResult.dealer ?? prev?.dealer
+          }));
+        }
       }, 'PokerTable');
 
       // 就绪进度
@@ -1462,7 +1541,11 @@ const PokerTable = () => {
             <div className="game-info">
               <span className="room-info">房间: {roomId}</span>
               <span className="phase-info">{getPhaseDescription()}</span>
-              <span className="level-info">
+              <span 
+                className="level-info clickable"
+                onClick={() => setShowLevelInfo(true)}
+                title="点击查看双方当前级别"
+              >
                 当前级牌: {gameState?.currentLevel || 2}
               </span>
               {/* 主色信息：摸底阶段结束后才对所有人显示，之前只有叫主玩家能看到 */}
@@ -1493,7 +1576,11 @@ const PokerTable = () => {
                 );
               })()}
                {gameState?.idleScore !== undefined && (
-                 <span className={`idle-score-info ${idleScoreAnimating ? 'score-pulse' : ''}`}>
+                 <span 
+                   className={`idle-score-info clickable ${idleScoreAnimating ? 'score-pulse' : ''}`}
+                   onClick={() => setShowScoreRules(true)}
+                   title="点击查看升级规则"
+                 >
                    💰 闲家得分{isIdlePlayer() ? '（你）' : ''}: {gameState.idleScore}
                  </span>
                )}
@@ -1562,6 +1649,24 @@ const PokerTable = () => {
                 );
               })}
             </div>
+            
+            {/* 游戏结束时显示底牌 */}
+            {gameState?.gamePhase === 'finished' && gameState?.bottomCards && gameState.bottomCards.length > 0 && (
+              <div className="bottom-cards-display">
+                <div className="bottom-cards-label">底牌</div>
+                <div className="bottom-cards-group">
+                  {gameState.bottomCards.map((card, index) => (
+                    <div key={index} className="bottom-card">
+                      <img 
+                        src={getCardImagePath(card)} 
+                        alt={getCardDisplayName(card)}
+                        className="bottom-card-image"
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
             
           </div>
 
@@ -1790,14 +1895,16 @@ const PokerTable = () => {
           >
             {isInitialReady ? '取消准备' : '准备'}
           </button>
-          <button
-            className="action-btn"
-            onClick={() => {
-              socketService.emit('startInitialGame', { roomId });
-            }}
-          >
-            开始游戏 ({initialReadyCount}/4)
-          </button>
+          {myPosition === 0 && (
+            <button
+              className="action-btn start-btn"
+              onClick={() => {
+                socketService.emit('startInitialGame', { roomId });
+              }}
+            >
+              开始游戏 ({initialReadyCount}/4)
+            </button>
+          )}
         </div>
       )}
 
@@ -1817,14 +1924,109 @@ const PokerTable = () => {
           >
             {isNextReady ? '取消准备' : '准备'}
           </button>
-          <button
-            className="action-btn"
-            onClick={() => {
-              socketService.emit('startNextGame', { roomId });
-            }}
-          >
-            开始下一局 ({nextReadyCount}/4)
-          </button>
+          {myPosition === 0 && (
+            <button
+              className="action-btn start-btn"
+              onClick={() => {
+                socketService.emit('startNextGame', { roomId });
+              }}
+            >
+              开始下一局 ({nextReadyCount}/4)
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* 级别信息弹层 */}
+      {showLevelInfo && (
+        <div className="level-modal-overlay" onClick={() => setShowLevelInfo(false)}>
+          <div className="level-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="level-modal-header">
+              <span>📈 双方当前级别</span>
+              <button className="level-modal-close" onClick={() => setShowLevelInfo(false)}>×</button>
+            </div>
+            <div className="level-modal-body">
+              {(() => {
+                const dealer = gameState?.dealer ?? 0;
+                const dealerTeam = dealer % 2; // 0: 偶数组(0,2)  1: 奇数组(1,3)
+                const team0Players = [0, 2].map(i => room?.players?.[i]?.name || `玩家${i + 1}`).join('、');
+                const team1Players = [1, 3].map(i => room?.players?.[i]?.name || `玩家${i + 1}`).join('、');
+                
+                // 获取双方级别，如果没有则使用默认值
+                const team0Level = gameState?.team0Level || gameState?.currentLevel || 2;
+                const team1Level = gameState?.team1Level || gameState?.currentLevel || 2;
+                
+                return (
+                  <>
+                    <div className={`level-row ${dealerTeam === 0 ? 'active' : ''}`}>
+                      <div className="level-side">队伍0 (0,2)：{team0Players}</div>
+                      <div className="level-value">级别：{team0Level}</div>
+                    </div>
+                    <div className={`level-row ${dealerTeam === 1 ? 'active' : ''}`}>
+                      <div className="level-side">队伍1 (1,3)：{team1Players}</div>
+                      <div className="level-value">级别：{team1Level}</div>
+                    </div>
+                    <div className="level-hint">
+                      当前级牌：{gameState?.currentLevel || 2} (庄家队级别)
+                    </div>
+                  </>
+                );
+              })()}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 得分规则弹层 */}
+      {showScoreRules && (
+        <div className="level-modal-overlay" onClick={() => setShowScoreRules(false)}>
+          <div className="level-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="level-modal-header">
+              <span>📊 升级规则</span>
+              <button className="level-modal-close" onClick={() => setShowScoreRules(false)}>×</button>
+            </div>
+            <div className="level-modal-body">
+              <div className="score-rules-section">
+                <h4>🏆 庄家升级</h4>
+                <div className="score-rule-item">
+                  <span className="score-range">闲家得分 &lt; 0</span>
+                  <span className="score-result">庄家升4级</span>
+                </div>
+                <div className="score-rule-item">
+                  <span className="score-range">闲家得分 = 0</span>
+                  <span className="score-result">庄家升3级</span>
+                </div>
+                <div className="score-rule-item">
+                  <span className="score-range">闲家得分 5-35分</span>
+                  <span className="score-result">庄家升2级</span>
+                </div>
+                <div className="score-rule-item">
+                  <span className="score-range">闲家得分 40-75分</span>
+                  <span className="score-result">庄家升1级</span>
+                </div>
+              </div>
+              
+              <div className="score-rules-section">
+                <h4>🔄 闲家上台</h4>
+                <div className="score-rule-item">
+                  <span className="score-range">闲家得分 80-115分</span>
+                  <span className="score-result">闲家上台，级别不变</span>
+                </div>
+                <div className="score-rule-item">
+                  <span className="score-range">闲家得分 120-155分</span>
+                  <span className="score-result">闲家上台并升1级</span>
+                </div>
+                <div className="score-rule-item">
+                  <span className="score-range">闲家得分 160-195分</span>
+                  <span className="score-result">闲家上台并升2级</span>
+                </div>
+                <div className="score-rule-item">
+                  <span className="score-range">闲家得分 ≥200分</span>
+                  <span className="score-result">闲家上台并升3级</span>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       )}
 

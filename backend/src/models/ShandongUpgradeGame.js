@@ -489,7 +489,9 @@ class CardTypeValidator {
 class ShandongUpgradeGame {
   constructor(players, debugMode = false, presetCards = null) {
     this.players = players;
-    this.currentLevel = 2; // 当前级别
+    this.team0Level = 2; // 队伍0级别 (位置0,2)
+    this.team1Level = 2; // 队伍1级别 (位置1,3)
+    this.currentLevel = 2; // 当前级牌 (当前庄家队的级别)
     this.trumpSuit = null; // 主牌花色
     this.trumpPlayer = null; // 亮主玩家
     this.firstTrumpPlayer = null; // 最先叫主的玩家（用于粘主交换）
@@ -1030,13 +1032,12 @@ class ShandongUpgradeGame {
         } else {
           // 非首局：闲家升三级，闲家成为庄家，然后重发
           console.log('叫主阶段无人亮主（非首局）：闲家升三级，成为庄家，重新发牌');
-          // 计算并应用“闲家升三级”与“闲家成为庄家”
+          // 计算并应用"闲家升三级"与"闲家成为庄家"
           const idleTeam = (this.dealer + 1) % 2; // 闲家队伍索引（0或1），与庄家队伍相反
-          // 升三级：调整 currentLevel
-          const levelOrder = ['2','3','4','5','6','7','8','9','10','J','Q','K','A'];
-          const curIdx = levelOrder.indexOf(String(this.currentLevel));
-          const newIdx = Math.min(curIdx + 3, levelOrder.length - 1);
-          this.currentLevel = levelOrder[newIdx];
+          
+          // 闲家升三级：升级闲家队伍
+          const newLevel = this.upgradeTeam(idleTeam, 3);
+          
           // 闲家成为庄家：选择闲家队伍内的庄家下家作为新庄家（与 getIdleTeamNextDealer 一致逻辑）
           let newDealer = (this.dealer + 1) % 4;
           if (idleTeam === 0) {
@@ -1045,6 +1046,12 @@ class ShandongUpgradeGame {
             if (newDealer % 2 !== 1) newDealer = (newDealer + 1) % 4;
           }
           this.dealer = newDealer;
+          
+          // 更新当前级牌为新的庄家队级别
+          this.currentLevel = this.getCurrentDealerTeamLevel();
+          
+          console.log(`📈 无人叫主升级: team0=${this.team0Level}, team1=${this.team1Level}, 当前级牌=${this.currentLevel}`);
+          
           // 通知前端提示词
           this._onNoBidLaterRound && this._onNoBidLaterRound({ newLevel: this.currentLevel, newDealer });
           // 重发
@@ -3034,7 +3041,11 @@ class ShandongUpgradeGame {
     const bottomPoints = this.calculateBottomPoints();
     console.log(`💰 底牌中的分数: ${bottomPoints}`);
     
-    // 先处理当前轮次的分数
+    // 获取最后一手牌的牌数
+    const lastHandCardCount = this.roundCards.length;
+    console.log(`🃏 最后一手牌数: ${lastHandCardCount}`);
+    
+    // 先处理当前轮次的分数（最后一手牌中的分数正常归到大的一方）
     if (winnerTeam !== trumpTeam) {
       // 闲家获得当前轮次分数
       console.log(`🏆 闲家队伍获得轮次分数 ${points} 分`);
@@ -3043,15 +3054,16 @@ class ShandongUpgradeGame {
       console.log(`🏆 庄家队伍获得轮次分数 ${points} 分`);
     }
     
-    // 处理底牌分数
+    // 处理底牌分数（根据最后一手牌数计算）
+    const bottomScoreMultiplier = bottomPoints * lastHandCardCount;
     if (winnerTeam !== trumpTeam) {
-      // 闲家大，闲家额外获得底牌分数
-      console.log(`🎉 闲家最后一手大，获得底牌分数 ${bottomPoints} 分`);
-      this.idleScore += bottomPoints;
+      // 闲家大，闲家额外获得底牌分数×牌数
+      console.log(`🎉 闲家最后一手大，获得底牌分数 ${bottomPoints} × ${lastHandCardCount} = ${bottomScoreMultiplier} 分`);
+      this.idleScore += bottomScoreMultiplier;
     } else {
-      // 庄家大，闲家失去底牌分数
-      console.log(`😔 庄家最后一手大，闲家失去底牌分数 ${bottomPoints} 分`);
-      this.idleScore = Math.max(0, this.idleScore - bottomPoints);
+      // 庄家大，闲家失去底牌分数×牌数（可以扣到负分）
+      console.log(`😔 庄家最后一手大，闲家失去底牌分数 ${bottomPoints} × ${lastHandCardCount} = ${bottomScoreMultiplier} 分`);
+      this.idleScore -= bottomScoreMultiplier;
     }
     
     console.log(`📊 最终闲家得分: ${this.idleScore}`);
@@ -3080,10 +3092,20 @@ class ShandongUpgradeGame {
   calculateFinalResults() {
     console.log('🎯 游戏结束，计算最终结果...');
     console.log(`📊 闲家最终得分: ${this.idleScore}`);
+    console.log(`📊 当前队伍级别: team0=${this.team0Level}, team1=${this.team1Level}`);
     
     const result = this.calculateUpgradeResult(this.idleScore);
     
     console.log('🎪 升级结果:', result);
+    
+    // 应用升级结果到游戏状态
+    this.dealer = result.newDealer;
+    // currentLevel 始终是当前庄家队的级别
+    this.currentLevel = this.getCurrentDealerTeamLevel();
+    
+    console.log(`📈 队伍级别更新: team0=${this.team0Level}, team1=${this.team1Level}`);
+    console.log(`🎯 当前级牌更新: ${this.currentLevel} (庄家队级别)`);
+    console.log(`👑 庄家更新: 位置${result.currentDealer} → 位置${result.newDealer}`);
     
     // 触发游戏结束事件，返回结果
     return {
@@ -3091,9 +3113,41 @@ class ShandongUpgradeGame {
       idleScore: this.idleScore,
       upgradeResult: result,
       currentLevel: this.currentLevel,
+      team0Level: this.team0Level,
+      team1Level: this.team1Level,
       trumpPlayer: this.trumpPlayer,
-      dealer: this.dealer
+      dealer: this.dealer,
+      bottomCards: this.bottomCards // 添加底牌信息
     };
+  }
+
+  // 获取当前庄家队的级别
+  getCurrentDealerTeamLevel() {
+    const dealerTeam = this.dealer % 2;
+    return dealerTeam === 0 ? this.team0Level : this.team1Level;
+  }
+
+  // 获取当前闲家队的级别
+  getCurrentIdleTeamLevel() {
+    const dealerTeam = this.dealer % 2;
+    return dealerTeam === 0 ? this.team1Level : this.team0Level;
+  }
+
+  // 升级指定队伍
+  upgradeTeam(teamIndex, levelChange) {
+    const levelOrder = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A'];
+    const currentLevel = teamIndex === 0 ? this.team0Level : this.team1Level;
+    const currentIndex = levelOrder.indexOf(currentLevel.toString());
+    const newIndex = Math.min(currentIndex + levelChange, levelOrder.length - 1);
+    const newLevel = levelOrder[newIndex];
+    
+    if (teamIndex === 0) {
+      this.team0Level = newLevel;
+    } else {
+      this.team1Level = newLevel;
+    }
+    
+    return newLevel;
   }
 
   // 根据闲家得分计算升级结果
@@ -3102,6 +3156,7 @@ class ShandongUpgradeGame {
     let newDealer = this.dealer;
     let status = '';
     let description = '';
+    let upgradedTeam = null; // 0: team0, 1: team1
     
     if (idleScore < 0) {
       // 闲家负分
@@ -3148,24 +3203,21 @@ class ShandongUpgradeGame {
       newDealer = this.getIdleTeamNextDealer();
     }
     
-    // 计算新的级别
-    let newLevel = this.currentLevel;
-    const levelOrder = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A'];
-    const currentIndex = levelOrder.indexOf(this.currentLevel.toString());
-    
+    // 确定升级的队伍
     if (status.includes('dealer')) {
-      // 庄家升级，正常升级
-      const newIndex = Math.min(currentIndex + levelChange, levelOrder.length - 1);
-      newLevel = levelOrder[newIndex];
+      // 庄家升级，升级当前庄家队
+      upgradedTeam = this.dealer % 2;
       // 庄家过庄，下一局由庄家对门坐庄
       newDealer = (this.dealer + 2) % 4;
-    } else {
-      // 闲家上台，闲家升级
-      if (levelChange > 0) {
-        const newIndex = Math.min(currentIndex + levelChange, levelOrder.length - 1);
-        newLevel = levelOrder[newIndex];
-      }
-      // 新庄家已在上面计算
+    } else if (status.includes('idle')) {
+      // 闲家上台，升级闲家队（即将成为新庄家队）
+      upgradedTeam = newDealer % 2;
+    }
+    
+    // 计算新的级别
+    let newLevel = this.getCurrentDealerTeamLevel();
+    if (upgradedTeam !== null && levelChange > 0) {
+      newLevel = this.upgradeTeam(upgradedTeam, levelChange);
     }
     
     return {
@@ -3175,6 +3227,9 @@ class ShandongUpgradeGame {
       newLevel,
       newDealer,
       currentDealer: this.dealer,
+      upgradedTeam,
+      team0Level: this.team0Level,
+      team1Level: this.team1Level,
       idleScore: this.idleScore,
       isGameWon: newLevel === 'A' && (status.includes('dealer') || status.includes('idle'))
     };
