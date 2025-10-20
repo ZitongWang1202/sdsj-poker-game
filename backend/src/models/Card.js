@@ -93,13 +93,13 @@ class Card {
 
   // 判断是否为分牌
   isScoreCard() {
-    return this.rank === 5 || this.rank === 10 || this.rank === 'K';
+    return this.rank === '5' || this.rank === '10' || this.rank === 'K';
   }
 
   // 获取分值
   getPoints() {
-    if (this.rank === 5) return 5;
-    if (this.rank === 10 || this.rank === 'K') return 10;
+    if (this.rank === '5') return 5;
+    if (this.rank === '10' || this.rank === 'K') return 10;
     return 0;
   }
 

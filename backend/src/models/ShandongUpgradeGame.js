@@ -1277,8 +1277,8 @@ class ShandongUpgradeGame {
       cardType: finalCardType
     });
     
-    // 下一个玩家
-    this.currentTurn = (this.currentTurn + 1) % 4;
+    // 下一个玩家（逆时针）
+    this.currentTurn = (this.currentTurn - 1 + 4) % 4;
     
     // 如果一轮结束
     if (this.roundCards.length === 4) {
@@ -1346,8 +1346,8 @@ class ShandongUpgradeGame {
       cardType: validation.cardType
     });
     
-    // 下一个玩家
-    this.currentTurn = (this.currentTurn + 1) % 4;
+    // 下一个玩家（逆时针）
+    this.currentTurn = (this.currentTurn - 1 + 4) % 4;
     
     // 如果一轮结束
     if (this.roundCards.length === 4) {
@@ -1436,8 +1436,24 @@ class ShandongUpgradeGame {
             message: `有${this.getSuitName(leadSuit)}必须跟牌` 
           };
         }
+      } else {
+        // 如果该花色的牌数不够，必须把所有该花色的牌都出完
+        const followedCards = cardsToPlay.filter(card => {
+          if (leadSuit === 'trump') {
+            return CardTypeValidator.isCardTrump(card, this.currentLevel, this.trumpSuit);
+          } else {
+            return card.suit === leadSuit && 
+                   !CardTypeValidator.isCardTrump(card, this.currentLevel, this.trumpSuit);
+          }
+        });
+        
+        if (followedCards.length < availableCards.length) {
+          return {
+            valid: false,
+            message: `${this.getSuitName(leadSuit)}不足时必须把所有${this.getSuitName(leadSuit)}都出完`
+          };
+        }
       }
-      // 如果该花色的牌数不够，允许垫牌（混合花色出牌）
     }
     
     // 牌型匹配规则
@@ -2618,7 +2634,9 @@ class ShandongUpgradeGame {
     this.roundCards = [];
     this.currentRound++;
     
-    console.log(`🎯 第${this.currentRound}轮结束，获胜者: 玩家${winner}，得分: ${points}，下一轮由玩家${winner}首发`);
+    const winnerPlayer = this.players[winner];
+    const winnerName = winnerPlayer ? winnerPlayer.name : `玩家${winner + 1}`;
+    console.log(`🎯 第${this.currentRound}轮结束，获胜者: ${winnerName}，得分: ${points}，下一轮由${winnerName}首发`);
     
     // 检查游戏是否结束
     if (this.isGameFinished()) {
@@ -3020,7 +3038,7 @@ class ShandongUpgradeGame {
       for (const card of roundCard.cards) {
         // 5分牌值5分，10和K值10分
         if (card.rank === '5') points += 5;
-        if (card.rank === 10 || card.rank === 'K') points += 10;
+        if (card.rank === '10' || card.rank === 'K') points += 10;
       }
     }
     
@@ -3076,7 +3094,7 @@ class ShandongUpgradeGame {
     for (const card of this.bottomCards) {
       // 5分牌值5分，10和K值10分
       if (card.rank === '5') points += 5;
-      if (card.rank === 10 || card.rank === 'K') points += 10;
+      if (card.rank === '10' || card.rank === 'K') points += 10;
     }
     
     return points;

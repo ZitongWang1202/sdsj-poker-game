@@ -32,6 +32,7 @@ const PokerTable = () => {
   const [showLevelInfo, setShowLevelInfo] = useState(false); // 是否显示级别信息弹层
   const [showScoreRules, setShowScoreRules] = useState(false); // 是否显示得分规则弹层
   const [idleScoreAnimating, setIdleScoreAnimating] = useState(false); // 闲家得分动画状态
+  const [showTrumpIndicator, setShowTrumpIndicator] = useState(false); // 是否显示主牌标识
 
   // 监听游戏状态变化，重新计算粘主选项
   useEffect(() => {
@@ -127,7 +128,7 @@ const PokerTable = () => {
       socketService.on('dealingStarted', (data) => {
         console.log('🎴 发牌开始:', data);
         setGameState(data.gameState);
-        setGameMessage('🎴 发牌开始，可以开始选择亮主牌');
+        // 删除发牌开始提示词
         setWaitingNext(false);
         setNextReadyCount(0);
         setWaitingInitialReady(false);  // 清除初始准备状态
@@ -192,10 +193,10 @@ const PokerTable = () => {
         // 根据游戏状态显示不同的消息
         if (data.gameState.trumpSuit) {
           // 已有人亮主，进入反主阶段
-          setGameMessage('📋 发牌结束！进入反主阶段');
+          setGameMessage('📋 发牌结束！请选择 一对王加一对 反主');
         } else {
           // 无人亮主，可以开始亮主
-          setGameMessage('📋 发牌结束！可以开始亮主');
+          setGameMessage('📋 发牌结束！请选择 一王加一对 亮主');
         }
         
         // 如果已经有人亮主，启动反主倒计时
@@ -288,10 +289,14 @@ const PokerTable = () => {
           const trumpSuit = data.gameState?.trumpSuit || gameState?.trumpSuit;
           const sortedCards = sortCards(data.cards, currentLevel, trumpSuit);
           
+          // 识别牌型
+          const cardType = identifyCardType(sortedCards, currentLevel, trumpSuit);
+          
           const newPlayed = [...prev, {
             playerId: data.playerId,
             playerName: data.playerName,
-            cards: sortedCards
+            cards: sortedCards,
+            cardType: cardType
           }];
           
           // 如果是轮次结束，显示等待信息
@@ -321,7 +326,8 @@ const PokerTable = () => {
 
       socketService.on('newRoundStarted', (data) => {
         console.log('🔄 新轮次开始:', data);
-        setGameMessage(`🔄 新轮次开始，${data.currentTurn === myPosition ? '你' : `玩家${data.currentTurn + 1}`}先出牌`);
+        const currentTurnPlayer = room?.players?.[data.currentTurn];
+        setGameMessage(`🔄 新轮次开始，${data.currentTurn === myPosition ? '你' : currentTurnPlayer?.name || `玩家${data.currentTurn + 1}`}先出牌`);
         setPlayedCards([]); // 清空桌面
         setGameState(data.gameState);
         setWaitingNext(false);
@@ -562,15 +568,26 @@ const PokerTable = () => {
         setGameState(data.gameState);
         setCounterTrumpCountdown(null); // 清除反主倒计时
         
-        // 只有反主玩家才重新排序手牌
-        // 其他玩家要等到摸底结束后才重新排序
-        if (myCards.length > 0 && myPosition === data.gameState?.trumpPlayer) {
-          setMyCards(prev => {
-            const currentLevel = data.gameState?.currentLevel || gameState?.currentLevel || 2;
-            const sorted = sortCards(prev, currentLevel, data.trumpSuit);
-            setSelectedCardIds(sel => sel.filter(id => sorted.some(c => c.id === id)));
-            return sorted;
-          });
+        if (myCards.length > 0) {
+          // 反主玩家：按新主色排序
+          if (myPosition === data.gameState?.trumpPlayer) {
+            setMyCards(prev => {
+              const currentLevel = data.gameState?.currentLevel || gameState?.currentLevel || 2;
+              const sorted = sortCards(prev, currentLevel, data.trumpSuit);
+              setSelectedCardIds(sel => sel.filter(id => sorted.some(c => c.id === id)));
+              return sorted;
+            });
+          }
+          // 原亮主玩家：恢复默认顺序（按花色排序，不按主色）
+          else if (myPosition === data.gameState?.firstTrumpPlayer) {
+            setMyCards(prev => {
+              const currentLevel = data.gameState?.currentLevel || gameState?.currentLevel || 2;
+              const sorted = sortCards(prev, currentLevel, null); // 不传trumpSuit，恢复默认顺序
+              setSelectedCardIds(sel => sel.filter(id => sorted.some(c => c.id === id)));
+              return sorted;
+            });
+          }
+          // 其他玩家：手牌顺序不变
         }
       }, 'PokerTable');
 
@@ -665,6 +682,8 @@ const PokerTable = () => {
           setStickExchange(null);
           setSelectedExchangeCards([]);
           setSelectedCardIds([]);
+          
+          // 出牌阶段：不在这里排序，因为摸底阶段已经排序过了
         }
       }, 'PokerTable');
 
@@ -677,7 +696,7 @@ const PokerTable = () => {
       socketService.on('bottomPhaseStarted', (data) => {
         console.log('🃏 摸底阶段开始:', data);
         setGameState(data.gameState);
-        const bottomPlayerName = data.bottomPlayerName || `玩家${data.bottomPlayer + 1}`;
+        const bottomPlayerName = data.bottomPlayerName || room?.players?.[data.bottomPlayer]?.name || `玩家${data.bottomPlayer + 1}`;
         
         // 根据是否是摸底玩家显示不同信息
         if (myPosition === data.bottomPlayer) {
@@ -709,6 +728,9 @@ const PokerTable = () => {
             return sorted;
           });
         }
+        
+        // 摸底完成后，显示主牌标识
+        setShowTrumpIndicator(true);
       }, 'PokerTable');
 
       // 监听摸底错误
@@ -1474,14 +1496,16 @@ const PokerTable = () => {
     // 摸底阶段：显示摸底玩家
     if (gameState.gamePhase === 'bottom') {
       if (gameState.bottomPlayer !== null && gameState.bottomPlayer !== undefined) {
-        return `玩家${gameState.bottomPlayer + 1}${gameState.bottomPlayer === myPosition ? '（你）' : ''}`;
+        const bottomPlayerName = room?.players?.[gameState.bottomPlayer]?.name || `玩家${gameState.bottomPlayer + 1}`;
+        return `${bottomPlayerName}${gameState.bottomPlayer === myPosition ? '（你）' : ''}`;
       }
     }
     
     // 出牌阶段：显示当前回合玩家
     if (gameState.gamePhase === 'playing') {
       if (gameState.currentTurn !== undefined) {
-        return `玩家${gameState.currentTurn + 1}${gameState.currentTurn === myPosition ? '（你）' : ''}`;
+        const currentTurnPlayerName = room?.players?.[gameState.currentTurn]?.name || `玩家${gameState.currentTurn + 1}`;
+        return `${currentTurnPlayerName}${gameState.currentTurn === myPosition ? '（你）' : ''}`;
       }
     }
     
@@ -1645,6 +1669,12 @@ const PokerTable = () => {
                         </div>
                       ))}
                     </div>
+                    {/* 牌型名称标识 */}
+                    {play.cardType && (
+                      <div className="card-type-label">
+                        {play.cardType.name}
+                      </div>
+                    )}
                   </div>
                 );
               })}
@@ -1875,6 +1905,9 @@ const PokerTable = () => {
                 // 出牌阶段（轮到自己时可以选牌）
                 (gameState?.gamePhase === 'playing' && gameState?.currentTurn === myPosition)
               }
+              currentLevel={gameState?.currentLevel || 2}
+              trumpSuit={gameState?.trumpSuit}
+              showTrumpIndicator={showTrumpIndicator}
             />
           </div>
 
@@ -1959,11 +1992,11 @@ const PokerTable = () => {
                 return (
                   <>
                     <div className={`level-row ${dealerTeam === 0 ? 'active' : ''}`}>
-                      <div className="level-side">队伍0 (0,2)：{team0Players}</div>
+                      <div className="level-side">队伍1：{team0Players}</div>
                       <div className="level-value">级别：{team0Level}</div>
                     </div>
                     <div className={`level-row ${dealerTeam === 1 ? 'active' : ''}`}>
-                      <div className="level-side">队伍1 (1,3)：{team1Players}</div>
+                      <div className="level-side">队伍2：{team1Players}</div>
                       <div className="level-value">级别：{team1Level}</div>
                     </div>
                     <div className="level-hint">

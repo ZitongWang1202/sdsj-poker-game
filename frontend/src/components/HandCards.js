@@ -1,5 +1,6 @@
 import React from 'react';
 import { getCardImagePath } from '../utils/cardAssets';
+import { isCardTrump } from '../utils/cardUtils';
 import './HandCards.css';
 
 /**
@@ -11,6 +12,9 @@ import './HandCards.css';
  * @param {boolean} props.isMyTurn - 是否是我的回合
  * @param {string} props.position - 手牌位置 ('bottom', 'top', 'left', 'right')
  * @param {boolean} props.canSelect - 是否可以选牌（用于亮主阶段）
+ * @param {number} props.currentLevel - 当前级别
+ * @param {string} props.trumpSuit - 主牌花色
+ * @param {boolean} props.showTrumpIndicator - 是否显示主牌标识
  */
 const HandCards = ({ 
   cards = [], 
@@ -18,7 +22,10 @@ const HandCards = ({
   onCardClick = () => {}, 
   isMyTurn = false,
   position = 'bottom',
-  canSelect = false
+  canSelect = false,
+  currentLevel = 2,
+  trumpSuit = null,
+  showTrumpIndicator = false
 }) => {
   
   const handleCardClick = (cardId) => {
@@ -83,28 +90,37 @@ const HandCards = ({
 
   return (
     <div className={getContainerClass()}>
-      {cards.map((card, index) => (
-        <div
-          key={card.id}
-          className={`hand-card-item ${selectedCardIds.includes(card.id) ? 'selected' : ''}`}
-          style={{
-            ...getCardStyle(index, cards.length),
-            bottom: selectedCardIds.includes(card.id) ? '20px' : '0px'
-          }}
-          onClick={() => handleCardClick(card.id)}
-          title={`${card.suit} ${card.rank}`}
-        >
-          <img
-            src={getCardImagePath(card)}
-            alt={`${card.suit} ${card.rank}`}
-            className="hand-card-image"
-            onError={(e) => {
-              console.error('卡牌图片加载失败:', getCardImagePath(card));
-              e.target.src = '/assets/cards/BACK.svg'; // 加载失败时显示背面
+      {cards.map((card, index) => {
+        const isTrump = showTrumpIndicator && isCardTrump(card, currentLevel, trumpSuit);
+        
+        return (
+          <div
+            key={card.id}
+            className={`hand-card-item ${selectedCardIds.includes(card.id) ? 'selected' : ''} ${isTrump ? 'trump-card' : ''}`}
+            style={{
+              ...getCardStyle(index, cards.length),
+              bottom: selectedCardIds.includes(card.id) ? '20px' : '0px'
             }}
-          />
-        </div>
-      ))}
+            onClick={() => handleCardClick(card.id)}
+            title={`${card.suit} ${card.rank}${isTrump ? ' (主牌)' : ''}`}
+          >
+            <img
+              src={getCardImagePath(card)}
+              alt={`${card.suit} ${card.rank}`}
+              className="hand-card-image"
+              onError={(e) => {
+                console.error('卡牌图片加载失败:', getCardImagePath(card));
+                e.target.src = '/assets/cards/BACK.svg'; // 加载失败时显示背面
+              }}
+            />
+            {isTrump && (
+              <div className="trump-indicator">
+                <span className="trump-star">★</span>
+              </div>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 };

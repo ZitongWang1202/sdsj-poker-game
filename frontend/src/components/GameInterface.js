@@ -27,8 +27,8 @@ const GameInterface = ({ room }) => {
     // 监听亮主事件
     socket.on('trumpDeclared', (data) => {
       setGameState(data.gameState);
-      // 重新排序手牌（根据主牌）
-      if (myCards.length > 0) {
+      // 只有亮主的人按新主色排序，其他人不变
+      if (myCards.length > 0 && myPosition === data.gameState?.trumpPlayer) {
         setMyCards(sortCards(myCards, gameState?.currentLevel, data.trumpSuit));
       }
     });

@@ -160,3 +160,45 @@
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
   border-color: transparent;
 }
+
+/* 主牌标识样式 */
+.trump-indicator {
+  position: absolute;
+  bottom: 5px;
+  left: 5px;
+  z-index: 10;
+  pointer-events: none;
+}
+
+.trump-star {
+  color: #FFD700; /* 金黄色 */
+  font-size: 16px;
+  font-weight: bold;
+  text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.8);
+  display: block;
+  line-height: 1;
+}
+
+/* 主牌卡牌特殊样式 */
+.hand-card-item.trump-card {
+  border-color: #FFD700;
+  box-shadow: 0 2px 8px rgba(255, 215, 0, 0.3);
+}
+
+/* 响应式设计 - 主牌标识 */
+@media (max-width: 1024px) {
+  .trump-star {
+    font-size: 12px;
+  }
+}
+
+@media (max-width: 768px) {
+  .trump-star {
+    font-size: 10px;
+  }
+  
+  .trump-indicator {
+    bottom: 3px;
+    left: 3px;
+  }
+}
