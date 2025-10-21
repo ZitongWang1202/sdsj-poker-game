@@ -1381,7 +1381,7 @@ class ShandongUpgradeGame {
     }
     
     // 检查是否为主牌
-    return cards.every(card => this.isCardTrump(card));
+    return cards.every(card => CardTypeValidator.isCardTrump(card, this.currentLevel, this.trumpSuit));
   }
 
   // 检查是否包含大王

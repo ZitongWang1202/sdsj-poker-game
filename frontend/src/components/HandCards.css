@@ -16,6 +16,9 @@
   justify-content: center;
   position: relative;
   min-height: 140px; /* 确保有足够高度显示选中状态 */
+  /* 固定容器尺寸，避免发牌过程中的布局变化 */
+  height: 140px;
+  overflow: hidden;
 }
 
 /* 顶部玩家手牌 */
@@ -29,6 +32,9 @@
   display: flex;
   justify-content: center;
   flex-wrap: wrap;
+  /* 固定容器尺寸，避免发牌过程中的布局变化 */
+  height: 120px;
+  overflow: hidden;
 }
 
 /* 左侧玩家手牌 */
@@ -41,6 +47,8 @@
   flex-direction: column;
   justify-content: center;
   align-items: center;
+  /* 固定容器尺寸，避免发牌过程中的布局变化 */
+  overflow: hidden;
 }
 
 /* 右侧玩家手牌 */
@@ -53,6 +61,8 @@
   flex-direction: column;
   justify-content: center;
   align-items: center;
+  /* 固定容器尺寸，避免发牌过程中的布局变化 */
+  overflow: hidden;
 }
 
 /* 卡牌样式 */

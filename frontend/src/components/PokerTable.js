@@ -30,7 +30,8 @@ const PokerTable = () => {
   const [isInitialReady, setIsInitialReady] = useState(false); // 我是否已初始准备
   const [isNextReady, setIsNextReady] = useState(false); // 我是否已准备下一局
   const [showLevelInfo, setShowLevelInfo] = useState(false); // 是否显示级别信息弹层
-  const [showScoreRules, setShowScoreRules] = useState(false); // 是否显示得分规则弹层
+  const [showScoreRules, setShowScoreRules] = useState(false);
+  const [phaseFlash, setPhaseFlash] = useState(false); // 阶段闪烁状态 // 是否显示得分规则弹层
   const [idleScoreAnimating, setIdleScoreAnimating] = useState(false); // 闲家得分动画状态
   const [showTrumpIndicator, setShowTrumpIndicator] = useState(false); // 是否显示主牌标识
 
@@ -242,7 +243,10 @@ const PokerTable = () => {
 
       socketService.on('trumpDeclared', (data) => {
         console.log('🎺 收到亮主事件:', data);
-        // 不显示亮主提示词
+        // 触发阶段闪烁效果
+        setPhaseFlash(true);
+        setTimeout(() => setPhaseFlash(false), 500); // 0.5秒后停止闪烁
+        
         setGameState(data.gameState);
         setTrumpCountdown(null); // 清除倒计时
         
@@ -1596,7 +1600,7 @@ const PokerTable = () => {
           <div className="game-header">
             <div className="game-info">
               <span className="room-info">房间: {roomId}</span>
-              <span className="phase-info">{getPhaseDescription()}</span>
+              <span className={`phase-info ${phaseFlash ? 'phase-flash' : ''}`}>{getPhaseDescription()}</span>
               <span 
                 className="level-info clickable"
                 onClick={() => setShowLevelInfo(true)}

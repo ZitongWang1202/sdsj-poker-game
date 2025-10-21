@@ -48,6 +48,23 @@
   cursor: pointer;
   text-decoration: underline dotted rgba(255,255,255,0.6);
 }
+
+/* 阶段闪烁效果 */
+.phase-flash {
+  animation: phaseFlash 0.5s ease-in-out;
+}
+
+@keyframes phaseFlash {
+  0%, 100% { 
+    background: rgba(255, 255, 255, 0.1);
+    transform: scale(1);
+  }
+  50% { 
+    background: rgba(255, 193, 7, 0.8);
+    transform: scale(1.1);
+    box-shadow: 0 0 20px rgba(255, 193, 7, 0.8);
+  }
+}
 .level-info.clickable:hover {
   opacity: 0.9;
 }

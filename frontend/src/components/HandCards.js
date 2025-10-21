@@ -40,14 +40,12 @@ const HandCards = ({
     const maxWidth = 900; // 最大宽度
     const cardWidth = 80; // 单张卡牌宽度
     
-    // 如果卡牌太多，动态调整重叠偏移
+    // 使用固定的偏移量，避免发牌过程中的布局变化
+    // 预设26张牌的布局参数，确保发牌过程中布局稳定
     let offset = baseOffset;
-    if (total > 26) {
-      // 30张牌的特殊情况，使用更紧密的间距
-      offset = Math.max(10, (maxWidth - cardWidth) / (total - 1));
-    } else if (total > 15) {
-      // 15-26张牌的情况
-      offset = Math.max(15, (maxWidth - cardWidth) / (total - 1));
+    if (total > 15) {
+      // 使用固定的紧密间距，避免发牌过程中的突然撑开
+      offset = Math.max(15, (maxWidth - cardWidth) / 25); // 使用25而不是total-1
     }
 
     const style = {
