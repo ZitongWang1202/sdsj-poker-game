@@ -421,6 +421,23 @@ export const getSequentialValue = (card, currentLevel = 2, trumpSuit = null) => 
 export const identifyConsecutivePairs = (cards, currentLevel = 2, trumpSuit = null) => {
   if (cards.length < 4 || cards.length % 2 !== 0) return { valid: false };
 
+  // 特殊检查：两张小王两张大王的连对
+  if (cards.length === 4) {
+    const jokerCards = cards.filter(card => card.suit === 'joker');
+    if (jokerCards.length === 4) {
+      const smallJokers = jokerCards.filter(card => card.rank === 'small');
+      const bigJokers = jokerCards.filter(card => card.rank === 'big');
+      
+      if (smallJokers.length === 2 && bigJokers.length === 2) {
+        return { 
+          valid: true, 
+          pairCount: 2,
+          isTrump: true
+        };
+      }
+    }
+  }
+
   // 按点数分组
   const rankGroups = {};
   for (const card of cards) {
@@ -515,30 +532,36 @@ export const identifyFlash = (cards, currentLevel = 2, trumpSuit = null) => {
 
   // 检查是否四张不同花色
   if (cards.length >= 4) {
-    const suits = new Set(cards.map(card => card.suit));
     const ranks = new Set(cards.map(card => card.rank));
     
-    // 四张相同点数，四种不同花色
-    if (ranks.size === 1 && suits.size === 4) {
-      // 仅允许 级牌 或 常主(2/3/5)
+    // 四张相同点数
+    if (ranks.size === 1) {
+      // 仅允许 级牌 或 常主(2/3/5)，不允许王
       const rankStr = String(cards[0].rank);
       const levelStr = String(currentLevel);
       const allowed = rankStr === levelStr || ['2','3','5'].includes(rankStr);
       if (!allowed) return { valid: false };
-      if (cards.length === 4) {
-        return {
-          valid: true,
-          type: 'flash',
-          name: '闪',
-          message: `${getCardDisplayName(cards[0])}闪`
-        };
-      } else {
-        return {
-          valid: true,
-          type: 'thunder',
-          name: '震',
-          message: `${getCardDisplayName(cards[0])}震`
-        };
+      
+      // 检查是否四种不同花色（排除王，只考虑普通花色）
+      const suits = new Set(cards.map(card => card.suit));
+      
+      // 必须四种不同花色，且不能包含王
+      if (suits.size === 4 && !suits.has('joker')) {
+        if (cards.length === 4) {
+          return {
+            valid: true,
+            type: 'flash',
+            name: '闪',
+            message: `${getCardDisplayName(cards[0])}闪`
+          };
+        } else {
+          return {
+            valid: true,
+            type: 'thunder',
+            name: '震',
+            message: `${getCardDisplayName(cards[0])}震`
+          };
+        }
       }
     }
   }
@@ -577,12 +600,18 @@ export const identifyStraight = (cards, currentLevel = 2, trumpSuit = null) => {
   const idxs = cards.map(c => toIdx(c.rank)).filter(i => i >= 0);
   if (idxs.length !== cards.length) return { valid: false };
 
+  // 获取所有唯一的牌点索引
   const unique = [...new Set(idxs)].sort((a, b) => a - b);
+  
+  // 检查是否有至少5个不同的牌点
   if (unique.length < 5) return { valid: false };
+  
+  // 检查牌点是否连续
   for (let i = 1; i < unique.length; i++) {
     if (unique[i] !== unique[i - 1] + 1) return { valid: false };
   }
 
+  // 检查所有牌都在连续区间内（允许重复）
   const minIdx = unique[0];
   const maxIdx = unique[unique.length - 1];
   if (!idxs.every(i => i >= minIdx && i <= maxIdx)) return { valid: false };
@@ -614,6 +643,40 @@ export const validateMixed = (cards, currentLevel = 2, trumpSuit = null) => {
     const allSuits = new Set(cards.map(card => card.suit));
     if (allSuits.size > 1) {
       return { valid: false, message: '甩牌不能混合花色' };
+    }
+    
+    // 额外检查：如果是副牌且≥5张，检查是否可能是雨（顺子）
+    if (cards.length >= 5) {
+      // 如果可能是雨，则不应该识别为甩牌
+      const levelStr = String(currentLevel);
+      const forbiddenRanks = new Set(['2','3','5', levelStr]);
+      const hasForbiddenRanks = cards.some(c => forbiddenRanks.has(String(c.rank)));
+      
+      if (!hasForbiddenRanks) {
+        // 检查是否连续（简化版检查）
+        const order = [2, 3, 4, 5, 6, 7, 8, 9, 10, 'J', 'Q', 'K', 'A'];
+        const toIdx = (r) => order.indexOf(r);
+        const idxs = cards.map(c => toIdx(c.rank)).filter(i => i >= 0);
+        
+        if (idxs.length === cards.length) {
+          const unique = [...new Set(idxs)].sort((a, b) => a - b);
+          if (unique.length >= 5) {
+            // 检查是否连续
+            let isConsecutive = true;
+            for (let i = 1; i < unique.length; i++) {
+              if (unique[i] !== unique[i - 1] + 1) {
+                isConsecutive = false;
+                break;
+              }
+            }
+            
+            if (isConsecutive) {
+              // 这可能是雨，不应该识别为甩牌
+              return { valid: false, message: '可能是雨（顺子），请检查牌型识别' };
+            }
+          }
+        }
+      }
     }
   }
 

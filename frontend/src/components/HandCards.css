@@ -179,10 +179,9 @@
   line-height: 1;
 }
 
-/* 主牌卡牌特殊样式 */
+/* 主牌卡牌特殊样式 - 移除黄框 */
 .hand-card-item.trump-card {
-  border-color: #FFD700;
-  box-shadow: 0 2px 8px rgba(255, 215, 0, 0.3);
+  /* 移除黄框样式，只保留主牌标识星号 */
 }
 
 /* 响应式设计 - 主牌标识 */

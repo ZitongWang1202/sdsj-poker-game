@@ -215,6 +215,27 @@
   color: #10b981;
 }
 
+/* 当前回合信息闪烁效果 */
+.turn-info.current-turn {
+  animation: currentPlayerPulse 1.5s infinite;
+  background: rgba(255, 193, 7, 0.3);
+  border: 1px solid rgba(255, 193, 7, 0.5);
+  color: #ffc107;
+}
+
+@keyframes currentPlayerPulse {
+  0%, 100% { 
+    transform: scale(1);
+    background: rgba(255, 193, 7, 0.3);
+    border: 1px solid rgba(255, 193, 7, 0.5);
+  }
+  50% { 
+    transform: scale(1.05);
+    background: rgba(255, 193, 7, 0.5);
+    border: 1px solid rgba(255, 193, 7, 0.7);
+  }
+}
+
 .leave-btn {
   background: rgba(220, 53, 69, 0.8);
   color: white;
@@ -323,6 +344,39 @@
   min-width: 40px;
 }
 
+/* 领出牌样式 - 金色 */
+.card-type-label.lead-card {
+  background: rgba(0, 0, 0, 0.8);
+  color: #ffd700;
+  border: 1px solid rgba(255, 215, 0, 0.3);
+}
+
+/* 跟牌样式 - 绿色 */
+.card-type-label.follow-card {
+  background: rgba(0, 0, 0, 0.8);
+  color: #10b981;
+  border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+/* 垫牌样式 - 灰色 */
+.card-type-label.follow-card.discard {
+  color: #6b7280;
+  border: 1px solid rgba(107, 114, 128, 0.3);
+}
+
+/* 杀牌样式 - 红色 */
+.card-type-label.follow-card.kill {
+  color: #ef4444;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+/* 超杀样式 - 深红色 */
+.card-type-label.follow-card.overkill {
+  color: #dc2626;
+  border: 1px solid rgba(220, 38, 38, 0.3);
+  background: rgba(220, 38, 38, 0.1);
+}
+
 .played-card-group.position-bottom {
   grid-column: 2;
   grid-row: 3;
@@ -382,6 +436,24 @@
 .played-card:hover .played-card-image {
   transform: scale(1.1);
   z-index: 100;
+}
+
+/* 出牌区域主牌标识样式 */
+.played-card .trump-indicator {
+  position: absolute;
+  bottom: 3px;
+  left: 3px;
+  z-index: 10;
+  pointer-events: none;
+}
+
+.played-card .trump-star {
+  color: #FFD700; /* 金黄色 */
+  font-size: 12px;
+  font-weight: bold;
+  text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.8);
+  display: block;
+  line-height: 1;
 }
 
 .round-info {

@@ -525,6 +525,9 @@ class ShandongUpgradeGame {
     // 山东升级特色：2,3,5为常主
     this.permanentTrumps = ['2', '3', '5'];
     
+    // 大王出牌状态跟踪
+    this.jokerPlayed = false; // 是否有人出过大王
+    
     // 调试模式
     this.debugMode = debugMode;
     this.presetCards = presetCards;
@@ -1126,6 +1129,7 @@ class ShandongUpgradeGame {
     this.currentTurn = 0;
     this.roundCards = [];
     this.idleScore = 0;
+    this.jokerPlayed = false; // 重置大王出牌状态
     this.gamePhase = 'dealing';
     this.dealingEndTime = null;
 
@@ -1339,6 +1343,11 @@ class ShandongUpgradeGame {
 
     const playedCards = player.playCards(cardIndices);
     
+    // 检查是否包含大王，更新大王出牌状态
+    if (this.hasJoker(playedCards)) {
+      this.jokerPlayed = true;
+    }
+    
     this.roundCards.push({
       playerId,
       cards: playedCards,
@@ -1362,6 +1371,24 @@ class ShandongUpgradeGame {
     };
   }
 
+  // 检查是否为主牌对子
+  isTrumpPair(cards) {
+    if (cards.length !== 2) return false;
+    
+    // 检查两张牌是否相同
+    if (cards[0].rank !== cards[1].rank || cards[0].suit !== cards[1].suit) {
+      return false;
+    }
+    
+    // 检查是否为主牌
+    return cards.every(card => this.isCardTrump(card));
+  }
+
+  // 检查是否包含大王
+  hasJoker(cards) {
+    return cards.some(card => card.suit === 'joker' && card.rank === 'big');
+  }
+
   // 验证出牌是否合法
   validatePlayCards(playerId, cardsToPlay) {
     // 识别牌型
@@ -1372,6 +1399,11 @@ class ShandongUpgradeGame {
       // lead玩家可以出任何有效牌型
       if (cardType.type === 'invalid') {
         return { valid: false, message: '无效的牌型' };
+      }
+      
+      // 检查大王出牌规则：未出过大王时不能领出主牌对子
+      if (!this.jokerPlayed && cardType.type === 'pair' && this.isTrumpPair(cardsToPlay)) {
+        return { valid: false, message: '场上没有人出过大王之前，不能领出主牌的对子' };
       }
       
       // 如果是甩牌（mixed），需要立即判定是否会被否定
@@ -3059,8 +3091,8 @@ class ShandongUpgradeGame {
     const bottomPoints = this.calculateBottomPoints();
     console.log(`💰 底牌中的分数: ${bottomPoints}`);
     
-    // 获取最后一手牌的牌数
-    const lastHandCardCount = this.roundCards.length;
+    // 获取最后一手牌的牌数（领出玩家的牌数）
+    const lastHandCardCount = this.roundCards[0].cards.length;
     console.log(`🃏 最后一手牌数: ${lastHandCardCount}`);
     
     // 先处理当前轮次的分数（最后一手牌中的分数正常归到大的一方）
@@ -3299,6 +3331,7 @@ class ShandongUpgradeGame {
       dealer: this.dealer,
       currentRound: this.currentRound,
       roundCards: this.roundCards,
+      jokerPlayed: this.jokerPlayed,
       players: this.players.map(p => p.getStatus())
     };
   }

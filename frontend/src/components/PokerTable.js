@@ -133,6 +133,10 @@ const PokerTable = () => {
         setNextReadyCount(0);
         setWaitingInitialReady(false);  // 清除初始准备状态
         setInitialReadyCount(0);
+        // 清空手牌，确保新一局开始时使用新的主牌花色
+        setMyCards([]);
+        setSelectedCardIds([]);
+        setPlayedCards([]);
       }, 'PokerTable');
 
       // 处理逐张发牌动画
@@ -261,8 +265,7 @@ const PokerTable = () => {
           }
         }
         
-        // 只有叫主玩家才重新排序手牌
-        // 其他玩家要等到摸底结束（进入playing阶段）后才能看到主色并重新排序
+        // 亮主后，亮主的人立即按主色排序
         if (myCards.length > 0 && myPosition === data.gameState?.trumpPlayer) {
           setMyCards(prev => {
             const currentLevel = data.gameState?.currentLevel || gameState?.currentLevel || 2;
@@ -279,7 +282,16 @@ const PokerTable = () => {
         if (data.message && data.message.includes('甩牌被否定')) {
           setGameMessage(`❌ ${data.playerName} ${data.message}`);
         } else {
-          setGameMessage(`🃏 ${data.playerName} 出牌`);
+          // 获取下一个出牌的玩家
+          const nextTurn = data.gameState?.currentTurn;
+          const nextPlayerName = nextTurn === myPosition ? '你' : (room?.players?.[nextTurn]?.name || `玩家${nextTurn + 1}`);
+          console.log('🔍 调试玩家名获取:', {
+            nextTurn,
+            roomPlayers: room?.players,
+            playerName: room?.players?.[nextTurn]?.name,
+            fallback: `玩家${nextTurn + 1}`
+          });
+          setGameMessage(`🃏 ${data.playerName}已出牌，轮到${nextPlayerName}${nextTurn === myPosition ? '（你）' : ''}出牌`);
         }
         setGameState(data.gameState);
         // 更新桌面显示的牌
@@ -292,11 +304,25 @@ const PokerTable = () => {
           // 识别牌型
           const cardType = identifyCardType(sortedCards, currentLevel, trumpSuit);
           
+          // 判断是否为领出牌（第一手牌）
+          const isLeadCard = prev.length === 0;
+          let displayType;
+          
+          if (isLeadCard) {
+            // 领出牌显示牌型名称
+            displayType = cardType.name;
+          } else {
+            // 跟牌显示跟牌类型
+            displayType = getFollowType(sortedCards, prev[0], currentLevel, trumpSuit);
+          }
+          
           const newPlayed = [...prev, {
             playerId: data.playerId,
             playerName: data.playerName,
             cards: sortedCards,
-            cardType: cardType
+            cardType: cardType,
+            displayType: displayType,
+            isLeadCard: isLeadCard
           }];
           
           // 如果是轮次结束，显示等待信息
@@ -1505,6 +1531,12 @@ const PokerTable = () => {
     if (gameState.gamePhase === 'playing') {
       if (gameState.currentTurn !== undefined) {
         const currentTurnPlayerName = room?.players?.[gameState.currentTurn]?.name || `玩家${gameState.currentTurn + 1}`;
+        console.log('🔍 调试当前回合玩家名:', {
+          currentTurn: gameState.currentTurn,
+          roomPlayers: room?.players,
+          playerName: room?.players?.[gameState.currentTurn]?.name,
+          fallback: `玩家${gameState.currentTurn + 1}`
+        });
         return `${currentTurnPlayerName}${gameState.currentTurn === myPosition ? '（你）' : ''}`;
       }
     }
@@ -1624,7 +1656,7 @@ const PokerTable = () => {
                 </span>
               )}
                {getCurrentTurnText() && (
-                 <span className="turn-info">
+                 <span className={`turn-info ${gameState?.gamePhase === 'playing' && gameState?.currentTurn === myPosition ? 'current-turn' : ''}`}>
                    当前回合: {getCurrentTurnText()}
                  </span>
                )}
@@ -1659,20 +1691,29 @@ const PokerTable = () => {
                 return (
                   <div key={index} className={`played-card-group position-${position}`}>
                     <div className="cards-group">
-                      {play.cards.map((card, cardIndex) => (
-                        <div key={cardIndex} className="played-card">
-                          <img 
-                            src={getCardImagePath(card)} 
-                            alt={getCardDisplayName(card)}
-                            className="played-card-image"
-                          />
-                        </div>
-                      ))}
+                      {play.cards.map((card, cardIndex) => {
+                        const isTrump = isCardTrump(card, gameState?.currentLevel || 2, gameState?.trumpSuit);
+                        return (
+                          <div key={cardIndex} className={`played-card ${isTrump ? 'trump-card' : ''}`}>
+                            <img 
+                              src={getCardImagePath(card)} 
+                              alt={getCardDisplayName(card)}
+                              className="played-card-image"
+                            />
+                            {/* 主牌标识 */}
+                            {isTrump && (
+                              <div className="trump-indicator">
+                                <span className="trump-star">★</span>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
                     {/* 牌型名称标识 */}
-                    {play.cardType && (
-                      <div className="card-type-label">
-                        {play.cardType.name}
+                    {play.displayType && (
+                      <div className={`card-type-label ${play.isLeadCard ? 'lead-card' : 'follow-card'} ${play.displayType === '垫牌' ? 'discard' : play.displayType === '杀牌' ? 'kill' : play.displayType === '超杀' ? 'overkill' : ''}`}>
+                        {play.displayType}
                       </div>
                     )}
                   </div>
