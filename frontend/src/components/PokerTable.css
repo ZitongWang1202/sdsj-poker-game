@@ -1,3 +1,10 @@
+/* 花色图标着色（当前主色显示） */
+.trump-suit-icon.hearts, .trump-suit-icon.diamonds {
+  color: #e53935; /* 红色：红桃/方片 */
+}
+.trump-suit-icon.spades, .trump-suit-icon.clubs {
+  color: #111; /* 深色：黑桃/梅花 */
+}
 /* 扑克桌面样式 - 全屏游戏界面 */
 .poker-table {
   width: 100vw;
@@ -342,6 +349,24 @@
   flex-direction: column;
   align-items: center;
   gap: 5px;
+}
+
+/* 当前最大一手牌的标识 */
+.played-card-group.current-winner .cards-group {
+  animation: winnerGlow 1.5s infinite;
+  position: relative;
+  z-index: 10;
+}
+
+@keyframes winnerGlow {
+  0%, 100% {
+    box-shadow: 0 0 15px rgba(255, 215, 0, 0.8);
+    border: 3px solid rgba(255, 215, 0, 0.8);
+  }
+  50% {
+    box-shadow: 0 0 25px rgba(255, 215, 0, 1);
+    border: 3px solid rgba(255, 215, 0, 1);
+  }
 }
 
 /* 牌型名称标识样式 */

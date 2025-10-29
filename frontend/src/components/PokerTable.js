@@ -198,7 +198,12 @@ const PokerTable = () => {
         // 根据游戏状态显示不同的消息
         if (data.gameState.trumpSuit) {
           // 已有人亮主，进入反主阶段
-          setGameMessage('📋 发牌结束！请选择 一对王加一对 反主');
+          // 如果我是亮主玩家，显示"等待其他玩家反主"
+          if (data.gameState.firstTrumpPlayer === myPosition) {
+            setGameMessage('📋 发牌结束！等待其他玩家反主');
+          } else {
+            setGameMessage('📋 发牌结束！请选择 一对王加一对 反主');
+          }
         } else {
           // 无人亮主，可以开始亮主
           setGameMessage('📋 发牌结束！请选择 一王加一对 亮主');
@@ -288,12 +293,30 @@ const PokerTable = () => {
         } else {
           // 获取下一个出牌的玩家
           const nextTurn = data.gameState?.currentTurn;
-          const nextPlayerName = nextTurn === myPosition ? '你' : (room?.players?.[nextTurn]?.name || `玩家${nextTurn + 1}`);
+          
+          // 优先从 gameState 获取玩家名
+          let nextPlayerName;
+          if (nextTurn === myPosition) {
+            nextPlayerName = '你';
+          } else {
+            // 先尝试从 gameState 获取
+            const playerInfo = data.gameState?.players?.[nextTurn];
+            if (playerInfo?.name) {
+              nextPlayerName = playerInfo.name;
+            } else if (room?.players?.[nextTurn]?.name) {
+              nextPlayerName = room.players[nextTurn].name;
+            } else {
+              nextPlayerName = `玩家${nextTurn + 1}`;
+            }
+          }
+          
           console.log('🔍 调试玩家名获取:', {
             nextTurn,
             roomPlayers: room?.players,
-            playerName: room?.players?.[nextTurn]?.name,
-            fallback: `玩家${nextTurn + 1}`
+            gameStatePlayers: data.gameState?.players,
+            playerName: room?.players?.[nextTurn]?.name || data.gameState?.players?.[nextTurn]?.name,
+            fallback: `玩家${nextTurn + 1}`,
+            finalName: nextPlayerName
           });
           setGameMessage(`🃏 ${data.playerName}已出牌，轮到${nextPlayerName}${nextTurn === myPosition ? '（你）' : ''}出牌`);
         }
@@ -316,8 +339,9 @@ const PokerTable = () => {
             // 领出牌显示牌型名称
             displayType = cardType.name;
           } else {
-            // 跟牌显示跟牌类型
-            displayType = getFollowType(sortedCards, prev[0], currentLevel, trumpSuit);
+            // 跟牌时，统一显示四类字样：跟牌/垫牌/杀牌/超杀
+            const followType = getFollowType(sortedCards, prev[0], currentLevel, trumpSuit);
+            displayType = followType;
           }
           
           const newPlayed = [...prev, {
@@ -328,6 +352,24 @@ const PokerTable = () => {
             displayType: displayType,
             isLeadCard: isLeadCard
           }];
+          
+          // 判断当前场上最大的一手牌（用黄框标识）
+          const leadCards = newPlayed[0].cards;
+          const leadSuit = getLeadSuitForCompare(leadCards, currentLevel, trumpSuit);
+          let maxPlayerIndex = 0;
+          
+          // 比较每一手牌，找出最大的
+          for (let i = 1; i < newPlayed.length; i++) {
+            const currentCards = newPlayed[i].cards;
+            if (compareCards(currentCards, newPlayed[maxPlayerIndex].cards, leadSuit, currentLevel, trumpSuit)) {
+              maxPlayerIndex = i;
+            }
+          }
+          
+          // 标记最大的一手牌
+          newPlayed.forEach((play, index) => {
+            play.isCurrentWinner = index === maxPlayerIndex;
+          });
           
           // 如果是轮次结束，显示等待信息
           if (newPlayed.length === 4) {
@@ -356,8 +398,31 @@ const PokerTable = () => {
 
       socketService.on('newRoundStarted', (data) => {
         console.log('🔄 新轮次开始:', data);
-        const currentTurnPlayer = room?.players?.[data.currentTurn];
-        setGameMessage(`🔄 新轮次开始，${data.currentTurn === myPosition ? '你' : currentTurnPlayer?.name || `玩家${data.currentTurn + 1}`}先出牌`);
+        
+        // 获取当前回合玩家名
+        let currentTurnPlayerName;
+        if (data.currentTurn === myPosition) {
+          currentTurnPlayerName = '你';
+        } else {
+          // 先尝试从 gameState 获取
+          const playerInfo = data.gameState?.players?.[data.currentTurn];
+          if (playerInfo?.name) {
+            currentTurnPlayerName = playerInfo.name;
+          } else if (room?.players?.[data.currentTurn]?.name) {
+            currentTurnPlayerName = room.players[data.currentTurn].name;
+          } else {
+            currentTurnPlayerName = `玩家${data.currentTurn + 1}`;
+          }
+        }
+        
+        console.log('🔍 调试新轮次玩家名:', {
+          currentTurn: data.currentTurn,
+          playerName: currentTurnPlayerName,
+          gameStatePlayers: data.gameState?.players,
+          roomPlayers: room?.players
+        });
+        
+        setGameMessage(`🔄 新轮次开始，${currentTurnPlayerName}先出牌`);
         setPlayedCards([]); // 清空桌面
         setGameState(data.gameState);
         setWaitingNext(false);
@@ -1024,6 +1089,94 @@ const PokerTable = () => {
     setSelectedCardIds([]);
   };
 
+  // 获取领出花色（用于比较）
+  const getLeadSuitForCompare = (cards, currentLevel, trumpSuit) => {
+    if (cards.length === 0) return null;
+    const firstCard = cards[0];
+    if (isCardTrump(firstCard, currentLevel, trumpSuit)) {
+      return 'trump';
+    }
+    return firstCard.suit;
+  };
+
+  // 比较两手牌，返回true如果card1更大
+  const compareCards = (card1Array, card2Array, leadSuit, currentLevel, trumpSuit) => {
+    // 如果是相同花色或都是主牌，比较大小
+    const card1Suit = getLeadSuitForCompare(card1Array, currentLevel, trumpSuit);
+    const card2Suit = getLeadSuitForCompare(card2Array, currentLevel, trumpSuit);
+    
+    // 主杀副：主牌总是比副牌大
+    if (card1Suit === 'trump' && card2Suit !== 'trump') return true;
+    if (card1Suit !== 'trump' && card2Suit === 'trump') return false;
+    if (card1Suit === 'trump' && card2Suit === 'trump') {
+      // 都是主牌：比较最大的一张
+      const maxCard1 = getMaxCard(card1Array, currentLevel, trumpSuit);
+      const maxCard2 = getMaxCard(card2Array, currentLevel, trumpSuit);
+      return getCardValueForCompare(maxCard1, currentLevel, trumpSuit) > 
+             getCardValueForCompare(maxCard2, currentLevel, trumpSuit);
+    }
+    
+    // 都是副牌：比较最大的一张
+    const maxCard1 = getMaxCard(card1Array, currentLevel, trumpSuit);
+    const maxCard2 = getMaxCard(card2Array, currentLevel, trumpSuit);
+    return getCardValueForCompare(maxCard1, currentLevel, trumpSuit) > 
+           getCardValueForCompare(maxCard2, currentLevel, trumpSuit);
+  };
+
+  // 获取一手牌中最大的一张
+  const getMaxCard = (cards, currentLevel, trumpSuit) => {
+    return cards.reduce((max, card) => {
+      return getCardValueForCompare(card, currentLevel, trumpSuit) > 
+             getCardValueForCompare(max, currentLevel, trumpSuit) ? card : max;
+    }, cards[0]);
+  };
+
+  // 获取牌的数值（用于比较）
+  const getCardValueForCompare = (card, currentLevel, trumpSuit) => {
+    // 大小王
+    if (card.suit === 'joker') {
+      return card.rank === 'small' ? 998 : 999;
+    }
+    
+    // 级牌
+    const rankStr = String(card.rank);
+    const levelStr = String(currentLevel);
+    if (rankStr === levelStr) {
+      if (card.suit === trumpSuit) return 997;
+      return 996;
+    }
+    
+    // 常主（2,3,5）
+    const permanentTrumps = ['2', '3', '5'].filter(r => r !== levelStr);
+    if (permanentTrumps.includes(rankStr)) {
+      if (card.suit === trumpSuit) {
+        if (rankStr === '5') return 995;
+        if (rankStr === '3') return 993;
+        if (rankStr === '2') return 991;
+      } else {
+        if (rankStr === '5') return 994;
+        if (rankStr === '3') return 992;
+        if (rankStr === '2') return 990;
+      }
+    }
+    
+    // 主花色普通牌
+    if (card.suit === trumpSuit) {
+      const trumpNormalRankValues = {
+        'A': 989, 'K': 988, 'Q': 987, 'J': 986, 
+        10: 985, 9: 984, 8: 983, 7: 982, 6: 981, 4: 980
+      };
+      return trumpNormalRankValues[card.rank] || 980;
+    }
+    
+    // 副牌
+    const rankValues = {
+      'A': 900, 'K': 890, 'Q': 880, 'J': 870, 
+      10: 860, 9: 850, 8: 840, 7: 830, 6: 820, 4: 810
+    };
+    return rankValues[card.rank] || 0;
+  };
+
   // 判断跟牌类型
   const getFollowType = (selectedCardObjects, leadCard) => {
     if (!leadCard || !leadCard.cards || selectedCardObjects.length === 0) {
@@ -1102,19 +1255,76 @@ const PokerTable = () => {
       return isPlayedKill;
     });
 
-    // 判断跟牌类型
+    // 基于牌型结构的匹配检查
+    const leadType = identifyCardType(leadCards, currentLevel, trumpSuit);
+    const currentType = identifyCardType(selectedCardObjects, currentLevel, trumpSuit);
+
+    const sameLength = selectedCardObjects.length === leadCards.length;
+    const structureMatched = (() => {
+      if (!sameLength) return false;
+      // 单张/对子/连对/雨需要对应结构一致
+      if (leadType.type === 'single') return currentType.type === 'single';
+      if (leadType.type === 'pair') return currentType.type === 'pair';
+      if (leadType.type === 'consecutive_pairs') {
+        return currentType.type === 'consecutive_pairs' && currentType.pairCount === leadType.pairCount;
+      }
+      if (leadType.type === 'straight') {
+        // 使用长度相同来近似约束雨的结构
+        return currentType.type === 'straight' && selectedCardObjects.length === leadCards.length;
+      }
+      // 其他非常规副牌结构，默认要求同长度
+      return sameLength;
+    })();
+
+    // 若完全跟花色，则为“跟牌”
     if (isAllLeadSuit) {
       return '跟牌';
-    } else if (isLeadNonTrump && isAllTrump && !hasKillInRound) {
-      // 领出副牌，跟牌全部是主牌，且前面没人杀牌 = 杀牌
-      return '杀牌';
-    } else if (isLeadNonTrump && isAllTrump && hasKillInRound) {
-      // 领出副牌，跟牌全部是主牌，且前面有人杀牌 = 超杀
-      return '超杀';
-    } else {
-      // 其他所有情况 = 垫牌
-      return '垫牌';
     }
+
+    // 领出为副牌时，才可能出现 杀牌/超杀
+    if (isLeadNonTrump) {
+      if (isAllTrump && structureMatched) {
+        // 计算之前是否已有有效的“杀”（结构匹配且全主）并找出其最大的一手
+        const leadSuitForCompare = getLeadSuit(leadCards);
+        let priorKillMax = null; // { cards }
+        for (let i = 1; i < playedCards.length; i++) {
+          const prev = playedCards[i];
+          const prevCards = prev.cards || [];
+          if (prevCards.length !== leadCards.length) continue;
+          const prevType = identifyCardType(prevCards, currentLevel, trumpSuit);
+          const prevAllTrump = prevCards.every(c => isCardTrump(c, currentLevel, trumpSuit));
+          const prevStructureMatched = (() => {
+            if (leadType.type === 'single') return prevType.type === 'single';
+            if (leadType.type === 'pair') return prevType.type === 'pair';
+            if (leadType.type === 'consecutive_pairs') {
+              return prevType.type === 'consecutive_pairs' && prevType.pairCount === leadType.pairCount;
+            }
+            if (leadType.type === 'straight') {
+              return prevType.type === 'straight' && prevCards.length === leadCards.length;
+            }
+            return true;
+          })();
+          if (!prevAllTrump || !prevStructureMatched) continue;
+          if (!priorKillMax) {
+            priorKillMax = { cards: prevCards };
+          } else {
+            if (compareCards(prevCards, priorKillMax.cards, leadSuitForCompare, currentLevel, trumpSuit)) {
+              priorKillMax = { cards: prevCards };
+            }
+          }
+        }
+
+        if (!priorKillMax) {
+          return '杀牌';
+        }
+        // 必须严格大于之前的杀，才算“超杀”，否则按“垫牌”
+        const isBiggerThanPriorKill = compareCards(selectedCardObjects, priorKillMax.cards, leadSuitForCompare, currentLevel, trumpSuit);
+        return isBiggerThanPriorKill ? '超杀' : '垫牌';
+      }
+    }
+
+    // 其他所有情况 = 垫牌
+    return '垫牌';
   };
 
   // 验证并识别出牌牌型
@@ -1130,6 +1340,15 @@ const PokerTable = () => {
       gameState?.currentLevel || 2,
       gameState?.trumpSuit
     );
+
+    // 调试日志：检查牌型识别结果
+    if (selectedCardObjects.length >= 5) {
+      console.log('🔍 雨识别调试:', {
+        selectedCards: selectedCardObjects,
+        rawType: rawType,
+        isLead: playedCards.length === 0
+      });
+    }
 
     // 如果是跟牌场景，优先用"跟牌规则"判断是否允许垫牌
     if (playedCards.length > 0) {
@@ -1149,8 +1368,8 @@ const PokerTable = () => {
         };
       }
 
-      // 跟牌校验通过：允许"无牌可跟时的垫牌"，不因牌型未知而拦截
-      const followType = getFollowType(selectedCardObjects, playedCards[0]);
+      // 跟牌校验通过：统一用 跟牌/垫牌/杀牌/超杀 四类字样作为按钮括号
+      const followType = getFollowType(selectedCardObjects, playedCards[0], gameState?.currentLevel || 2, gameState?.trumpSuit);
       const safeType = rawType.type === 'invalid'
         ? { type: 'follow', name: followType, cards: selectedCardObjects, message: followType }
         : { ...rawType, name: followType };
@@ -1617,7 +1836,17 @@ const PokerTable = () => {
                 
                 return shouldShowTrumpSuit && gameState?.trumpSuit && (
                   <span className="trump-info">
-                    当前主色: {gameState.trumpSuit}
+                    当前主色: {(() => {
+                      const suit = gameState.trumpSuit;
+                      const iconMap = {
+                        'hearts': '♥',
+                        'spades': '♠',
+                        'diamonds': '♦',
+                        'clubs': '♣'
+                      };
+                      const icon = iconMap[suit] || suit;
+                      return <span className={`trump-suit-icon ${suit}`}>{icon}</span>;
+                    })()}
                   </span>
                 );
               })()}
@@ -1693,7 +1922,7 @@ const PokerTable = () => {
                 }
                 
                 return (
-                  <div key={index} className={`played-card-group position-${position}`}>
+                  <div key={index} className={`played-card-group position-${position} ${play.isCurrentWinner ? 'current-winner' : ''}`}>
                     <div className="cards-group">
                       {play.cards.map((card, cardIndex) => {
                         const isTrump = isCardTrump(card, gameState?.currentLevel || 2, gameState?.trumpSuit);
@@ -1902,22 +2131,25 @@ const PokerTable = () => {
                     </button>
                   )}
                   
-                  {gameState?.gamePhase === 'playing' && (
-                    <button 
-                      onClick={handlePlayCards} 
-                      className={`action-btn play-btn ${
-                        validatePlayCards(selectedCardIds).valid ? 'valid' : 'invalid'
-                      }`}
-                      disabled={!validatePlayCards(selectedCardIds).valid}
-                    >
-                      {selectedCardIds.length > 0 
-                        ? (validatePlayCards(selectedCardIds).valid 
-                          ? `✅ 出牌 (${validatePlayCards(selectedCardIds).cardType.name})` 
-                          : '❌ 无效牌型')
-                        : '出牌'
-                      }
-                    </button>
-                  )}
+                  {gameState?.gamePhase === 'playing' && (() => {
+                    const validation = validatePlayCards(selectedCardIds);
+                    return (
+                      <button 
+                        onClick={handlePlayCards} 
+                        className={`action-btn play-btn ${
+                          validation.valid ? 'valid' : 'invalid'
+                        }`}
+                        disabled={!validation.valid}
+                      >
+                        {selectedCardIds.length > 0 
+                          ? (validation.valid 
+                            ? `✅ 出牌 (${validation.cardType.name})` 
+                            : '❌ 无效牌型')
+                          : '出牌'
+                        }
+                      </button>
+                    );
+                  })()}
                   <button onClick={() => setSelectedCardIds([])} className="action-btn cancel-btn">
                     取消选择
                   </button>

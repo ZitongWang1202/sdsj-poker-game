@@ -18,7 +18,8 @@
   min-height: 140px; /* 确保有足够高度显示选中状态 */
   /* 固定容器尺寸，避免发牌过程中的布局变化 */
   height: 140px;
-  overflow: hidden;
+  overflow: visible; /* 改为 visible 让上移的牌不被裁剪 */
+  z-index: 1000; /* 提高层级确保牌在最上层 */
 }
 
 /* 顶部玩家手牌 */
@@ -75,6 +76,7 @@
   background: white;
   border: 2px solid transparent;
   user-select: none;
+  position: relative; /* 添加相对定位以便设置 z-index */
 }
 
 /* 卡牌图片 */
@@ -99,6 +101,7 @@
   border-color: #ff4444;
   box-shadow: 0 4px 16px rgba(255, 68, 68, 0.4);
   transform: translateY(-15px);
+  z-index: 1010; /* 选中时提高层级 */
 }
 
 /* 选中状态的悬停效果 */
