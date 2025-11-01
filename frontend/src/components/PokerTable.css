@@ -1,4 +1,12 @@
 /* 花色图标着色（当前主色显示） */
+.trump-suit-icon {
+  font-size: 1.3em; /* 比文字大30% */
+  display: inline-block;
+  vertical-align: baseline;
+  margin-left: 2px;
+  position: relative;
+  top: 0px; /* 上移，与文字对齐 */
+}
 .trump-suit-icon.hearts, .trump-suit-icon.diamonds {
   color: #e53935; /* 红色：红桃/方片 */
 }
@@ -932,6 +940,14 @@
 .current-turn-indicator {
   margin-left: 8px;
   font-size: 18px;
+  animation: pulse 1.5s infinite;
+}
+
+.ready-indicator {
+  margin-left: 8px;
+  font-size: 18px;
+  color: #4caf50; /* 绿色 */
+  font-weight: bold;
   animation: pulse 1.5s infinite;
 }
 

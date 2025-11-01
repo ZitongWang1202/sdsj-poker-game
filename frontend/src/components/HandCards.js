@@ -15,6 +15,7 @@ import './HandCards.css';
  * @param {number} props.currentLevel - 当前级别
  * @param {string} props.trumpSuit - 主牌花色
  * @param {boolean} props.showTrumpIndicator - 是否显示主牌标识
+ * @param {string} props.gamePhase - 游戏阶段
  */
 const HandCards = ({ 
   cards = [], 
@@ -25,7 +26,8 @@ const HandCards = ({
   canSelect = false,
   currentLevel = 2,
   trumpSuit = null,
-  showTrumpIndicator = false
+  showTrumpIndicator = false,
+  gamePhase = null
 }) => {
   
   const handleCardClick = (cardId) => {
@@ -90,6 +92,19 @@ const HandCards = ({
     <div className={getContainerClass()}>
       {cards.map((card, index) => {
         const isTrump = showTrumpIndicator && isCardTrump(card, currentLevel, trumpSuit);
+        const isBottomCard = gamePhase === 'bottom' && card.isBottomCard === true;
+        
+        // 调试：检查底牌标识显示
+        if (gamePhase === 'bottom' && card.isBottomCard === true) {
+          console.log('🃏 HandCards检测到底牌标记:', {
+            gamePhase,
+            cardId: card.id,
+            cardSuit: card.suit,
+            cardRank: card.rank,
+            isBottomCard: card.isBottomCard,
+            shouldShow: isBottomCard
+          });
+        }
         
         return (
           <div
@@ -100,7 +115,7 @@ const HandCards = ({
               bottom: selectedCardIds.includes(card.id) ? '20px' : '0px'
             }}
             onClick={() => handleCardClick(card.id)}
-            title={`${card.suit} ${card.rank}${isTrump ? ' (主牌)' : ''}`}
+            title={`${card.suit} ${card.rank}${isTrump ? ' (主牌)' : ''}${isBottomCard ? ' (底牌)' : ''}`}
           >
             <img
               src={getCardImagePath(card)}
@@ -114,6 +129,11 @@ const HandCards = ({
             {isTrump && (
               <div className="trump-indicator">
                 <span className="trump-star">★</span>
+              </div>
+            )}
+            {isBottomCard && (
+              <div className="bottom-card-indicator">
+                <span className="bottom-card-label">底</span>
               </div>
             )}
           </div>

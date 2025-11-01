@@ -659,7 +659,7 @@ io.on('connection', (socket) => {
     if (!room) return;
     // 需要4人全部就绪
     if (!room.initialGameReady || room.initialGameReady.size < 4) {
-      io.to(roomId).emit('startInitialGameRejected', { reason: '需要四名玩家全部就绪' });
+      socket.emit('startInitialGameRejected', { reason: '需要四名玩家全部就绪' });
       return;
     }
     try {
@@ -714,10 +714,26 @@ io.on('connection', (socket) => {
           
           // 更新摸底玩家的手牌（因为添加了4张底牌）
           if (bottomPlayer) {
+            // 确保所有底牌都有标记（防御性检查）
+            if (room.game && room.game.bottomCards) {
+              const bottomCardIds = room.game.bottomCards.map(c => c.id);
+              bottomPlayer.cards.forEach(card => {
+                if (bottomCardIds.includes(card.id)) {
+                  card.isBottomCard = true;
+                }
+              });
+            }
+            
             const playerSocket = io.sockets.sockets.get(bottomPlayer.socketId);
             if (playerSocket) {
+              // 显式创建包含所有属性的卡牌对象，确保 isBottomCard 被序列化
+              const cardsWithProps = bottomPlayer.cards.map(card => ({
+                ...card,
+                isBottomCard: card.isBottomCard || false
+              }));
+              
               playerSocket.emit('handUpdated', {
-                cards: bottomPlayer.cards,
+                cards: cardsWithProps,
                 gameState: gameState
               });
             }

@@ -496,6 +496,7 @@ class ShandongUpgradeGame {
     this.trumpPlayer = null; // 亮主玩家
     this.firstTrumpPlayer = null; // 最先叫主的玩家（用于粘主交换）
     this.trumpRank = null; // 主牌级别
+    this.trumpJokerRank = null; // 亮主时使用的王（'big' 或 'small'）
     this.counterTrumpPlayer = null; // 反主玩家
     this.counterTrumpEndTime = null; // 反主结束时间
     this.declareEndTime = null; // 发牌结束后10s的叫主截止
@@ -672,10 +673,15 @@ class ShandongUpgradeGame {
       return { success: false, message: '需要恰好两张普通牌' };
     }
 
-    // 检查是否为一对
+    // 检查是否为一对（相同点数）
     const [card1, card2] = normalCards;
     if (card1.rank !== card2.rank) {
       return { success: false, message: '两张普通牌必须是一对(相同点数)' };
+    }
+
+    // 检查一对牌必须是同一花色
+    if (card1.suit !== card2.suit) {
+      return { success: false, message: '一对牌必须是同一花色' };
     }
 
     // 检查玩家是否确实拥有这些牌
@@ -690,18 +696,13 @@ class ShandongUpgradeGame {
 
     // 确定主牌花色和级别
     const pairRank = card1.rank;
-    let trumpSuit = null;
-    
-    // 如果对子是级牌，则花色为主花色
-    if (pairRank === this.currentLevel) {
-      trumpSuit = card1.suit === card2.suit ? card1.suit : 'mixed';
-    } else {
-      trumpSuit = card1.suit === card2.suit ? card1.suit : 'mixed';
-    }
+    const jokerRank = jokers[0].rank; // 保存是"大王"还是"小王"
+    const trumpSuit = card1.suit; // 一对牌必须是同一花色，所以直接使用花色
 
     // 设置主牌信息
     this.trumpSuit = trumpSuit;
     this.trumpRank = pairRank;
+    this.trumpJokerRank = jokerRank;
     this.trumpPlayer = playerId;
     if (this.firstTrumpPlayer === null) {
       this.firstTrumpPlayer = playerId;
@@ -737,6 +738,7 @@ class ShandongUpgradeGame {
       success: true, 
       trumpSuit: trumpSuit,
       trumpRank: pairRank,
+      trumpJokerRank: jokerRank,
       dealer: playerId,
       counterTrumpEndTime: this.counterTrumpEndTime
     };
@@ -804,16 +806,21 @@ class ShandongUpgradeGame {
       return { success: false, message: '反主必须包含一对普通牌' };
     }
 
-    // 检查王牌是否是一对（相同等级的王）
+    // 检查王牌是否是一对（必须是两张大王或者两张小王）
     const [joker1, joker2] = jokers;
     if (joker1.rank !== joker2.rank) {
-      return { success: false, message: '王牌必须是一对相同的王' };
+      return { success: false, message: '一对王必须是两张大王或者两张小王' };
     }
 
     // 检查普通牌是否是一对（相同点数）
     const [normal1, normal2] = normalCards;
     if (normal1.rank !== normal2.rank) {
       return { success: false, message: '普通牌必须是一对（相同点数）' };
+    }
+
+    // 检查一对牌必须是同一花色
+    if (normal1.suit !== normal2.suit) {
+      return { success: false, message: '一对牌必须是同一花色' };
     }
 
     // 检查玩家是否确实拥有这些牌
@@ -831,8 +838,8 @@ class ShandongUpgradeGame {
     this.trumpPlayer = playerId;
     this.dealer = playerId;
     
-    // 反主后，主牌花色和级别由反主者的普通牌对决定
-    this.trumpSuit = normal1.suit === normal2.suit ? normal1.suit : 'mixed';
+    // 反主后，主牌花色和级别由反主者的普通牌对决定（一对牌必须是同一花色）
+    this.trumpSuit = normal1.suit;
     this.trumpRank = normal1.rank;
     
     // 一人反主之后其他人不能再反主
@@ -1118,6 +1125,7 @@ class ShandongUpgradeGame {
     this._clearAllPhaseTimers();
     this.trumpSuit = null;
     this.trumpPlayer = null;
+    this.trumpJokerRank = null;
     this.firstTrumpPlayer = null;
     this.trumpRank = null;
     this.counterTrumpPlayer = null;
@@ -3379,6 +3387,7 @@ class ShandongUpgradeGame {
       currentLevel: this.currentLevel,
       trumpSuit: this.trumpSuit,
       trumpRank: this.trumpRank,
+      trumpJokerRank: this.trumpJokerRank,
       trumpPlayer: this.trumpPlayer,
       firstTrumpPlayer: this.firstTrumpPlayer,
       counterTrumpPlayer: this.counterTrumpPlayer,
@@ -3409,9 +3418,14 @@ class ShandongUpgradeGame {
     this.gamePhase = 'bottom';
     this.bottomPlayer = this._determineBottomPlayer();
     
-    // 给摸底玩家添加底牌
+    // 给摸底玩家添加底牌，并标记为底牌
     const bottomPlayerObj = this.players[this.bottomPlayer];
-    bottomPlayerObj.cards.push(...this.bottomCards);
+    // 给底牌添加标记，以便前端识别
+    const markedBottomCards = this.bottomCards.map(card => {
+      card.isBottomCard = true;
+      return card;
+    });
+    bottomPlayerObj.cards.push(...markedBottomCards);
     
     console.log(`进入摸底阶段，摸底玩家: 玩家${this.bottomPlayer}(${bottomPlayerObj.name})`);
     
