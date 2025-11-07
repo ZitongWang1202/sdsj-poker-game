@@ -645,7 +645,10 @@ const PokerTable = () => {
           });
         }
         
-        const sorted = sortCards(cardsWithProps, currentLevel, trumpSuit);
+        // 摸底阶段：不按主色排序，保持默认顺序，避免暴露主色信息
+        // 摸底结束后再按主色排序（在 bottomCardsHandled 事件中处理）
+        const sortTrumpSuit = data.gameState?.gamePhase === 'bottom' ? null : trumpSuit;
+        const sorted = sortCards(cardsWithProps, currentLevel, sortTrumpSuit);
         console.log('✋ 排序后手牌:', sorted.length, '张');
         console.log('✋ 排序后前5张:', sorted.slice(0, 5));
         
