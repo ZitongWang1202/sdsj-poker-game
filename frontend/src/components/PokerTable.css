@@ -339,17 +339,19 @@
   justify-content: center;
   backdrop-filter: blur(5px);
   z-index: 10;
+  overflow: visible;
 }
 
 .played-cards {
   display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
-  grid-template-rows: 1fr 1fr 1fr;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr);
   gap: 20px;
   width: 100%;
   max-width: 800px;
   height: 100%;
   max-height: 450px;
+  overflow: visible;
 }
 
 .played-card-group {
@@ -357,6 +359,11 @@
   flex-direction: column;
   align-items: center;
   gap: 5px;
+  min-width: 0;
+  min-height: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
 }
 
 /* 当前最大一手牌的标识 */
@@ -469,14 +476,22 @@
   display: flex;
   gap: 2px;
   align-items: center;
+  justify-content: center;
+  flex-wrap: nowrap;
+  min-width: 0;
+  overflow: visible;
 }
 
 .played-card {
   position: relative;
+  flex-shrink: 0;
+  width: 50px;
+  min-width: 50px;
 }
 
 .played-card-image {
-  width: 50px;
+  width: 100%;
+  max-width: 100%;
   height: auto;
   border-radius: 6px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
