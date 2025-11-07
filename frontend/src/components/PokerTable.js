@@ -392,22 +392,12 @@ const PokerTable = () => {
             isLeadCard: isLeadCard
           }];
           
-          // 判断当前场上最大的一手牌（用黄框标识）
-          const leadCards = newPlayed[0].cards;
-          const leadSuit = getLeadSuitForCompare(leadCards, currentLevel, trumpSuit);
-          let maxPlayerIndex = 0;
-          
-          // 比较每一手牌，找出最大的
-          for (let i = 1; i < newPlayed.length; i++) {
-            const currentCards = newPlayed[i].cards;
-            if (compareCards(currentCards, newPlayed[maxPlayerIndex].cards, leadSuit, currentLevel, trumpSuit)) {
-              maxPlayerIndex = i;
-            }
-          }
+          // 使用后端返回的当前最大一手牌索引（复用后端比较逻辑）
+          const currentWinnerIndex = data.currentWinnerIndex !== undefined ? data.currentWinnerIndex : 0;
           
           // 标记最大的一手牌
           newPlayed.forEach((play, index) => {
-            play.isCurrentWinner = index === maxPlayerIndex;
+            play.isCurrentWinner = index === currentWinnerIndex;
           });
           
           // 如果是轮次结束，显示等待信息
@@ -1184,7 +1174,132 @@ const PokerTable = () => {
     return firstCard.suit;
   };
 
-  // 比较两手牌，返回true如果card1更大
+  // 判断一组牌是否都是主牌
+  const isCardGroupTrump = (cards, currentLevel, trumpSuit) => {
+    return cards.every(card => isCardTrump(card, currentLevel, trumpSuit));
+  };
+
+  // 获取牌型优先级
+  const getCardTypePriority = (cardType) => {
+    const priorities = {
+      'thunder': 7,    // 震
+      'flash': 6,      // 闪
+      'straight': 5,   // 雨
+      'consecutive_pairs': 4, // 连对
+      'pair': 3,       // 对子
+      'single': 2,     // 单张
+      'mixed': 1       // 甩牌
+    };
+    return priorities[cardType] || 0;
+  };
+
+  // 判断是否为"合格主杀"：
+  // 1) 全是主牌；2) 与领出牌型相同；3) 数量相同。
+  const isQualifiedTrumpKill = (cardGroup, leadCardGroup, currentLevel, trumpSuit) => {
+    const leadType = leadCardGroup.cardType;
+    
+    // 领出为主牌时，不适用"主杀"概念；直接按原有主牌比较
+    const leadIsTrump = leadCardGroup.cards && leadCardGroup.cards.length > 0 &&
+      isCardGroupTrump(leadCardGroup.cards, currentLevel, trumpSuit);
+    if (leadIsTrump) {
+      return isCardGroupTrump(cardGroup.cards, currentLevel, trumpSuit);
+    }
+
+    // 领出为副牌时，必须满足"合格主杀"条件
+    const isGroupTrump = isCardGroupTrump(cardGroup.cards, currentLevel, trumpSuit);
+    if (!isGroupTrump) return false;
+
+    // 数量一致
+    if (!leadType || cardGroup.cards.length !== leadCardGroup.cards.length) return false;
+
+    // 牌型一致
+    const typesMatch = cardGroup.cardType && leadType.type === cardGroup.cardType.type;
+    if (!typesMatch) return false;
+
+    return true;
+  };
+
+  // 比较主牌
+  const compareTrumpCards = (card1, card2, currentLevel, trumpSuit) => {
+    // 首先比较牌型优先级
+    const type1Priority = getCardTypePriority(card1.cardType?.type);
+    const type2Priority = getCardTypePriority(card2.cardType?.type);
+    
+    if (type1Priority !== type2Priority) {
+      return type1Priority > type2Priority;
+    }
+
+    // 相同牌型，比较最大牌值
+    const maxValue1 = Math.max(...card1.cards.map(card => 
+      getCardValueForCompare(card, currentLevel, trumpSuit)
+    ));
+    const maxValue2 = Math.max(...card2.cards.map(card => 
+      getCardValueForCompare(card, currentLevel, trumpSuit)
+    ));
+
+    return maxValue1 > maxValue2;
+  };
+
+  // 检查是否跟了首发花色
+  const followsLeadSuit = (cards, leadSuit, currentLevel, trumpSuit) => {
+    if (leadSuit === 'trump') {
+      return isCardGroupTrump(cards, currentLevel, trumpSuit);
+    }
+    // 检查是否有跟领出花色的牌
+    return cards.some(card => card.suit === leadSuit);
+  };
+
+  // 比较副牌（只有跟对应花色的才能比较）
+  const compareSuitCards = (card1, card2, leadSuit, currentLevel, trumpSuit) => {
+    const card1FollowsLead = followsLeadSuit(card1.cards, leadSuit, currentLevel, trumpSuit);
+    const card2FollowsLead = followsLeadSuit(card2.cards, leadSuit, currentLevel, trumpSuit);
+
+    // 只有跟牌的才能获胜
+    if (card1FollowsLead && !card2FollowsLead) return true;
+    if (!card1FollowsLead && card2FollowsLead) return false;
+    if (!card1FollowsLead && !card2FollowsLead) return false; // 都不跟牌，原来的大
+
+    // 都跟牌，比较牌型和大小
+    const type1Priority = getCardTypePriority(card1.cardType?.type);
+    const type2Priority = getCardTypePriority(card2.cardType?.type);
+    
+    if (type1Priority !== type2Priority) {
+      return type1Priority > type2Priority;
+    }
+
+    // 相同牌型，比较最大牌的大小
+    const maxValue1 = Math.max(...card1.cards.map(card => 
+      getCardValueForCompare(card, currentLevel, trumpSuit)
+    ));
+    const maxValue2 = Math.max(...card2.cards.map(card => 
+      getCardValueForCompare(card, currentLevel, trumpSuit)
+    ));
+
+    return maxValue1 > maxValue2;
+  };
+
+  // 比较两手牌（完整逻辑），返回true如果card1更大
+  const comparePlayedCards = (card1, card2, leadCard, currentLevel, trumpSuit) => {
+    // 引入"合格主杀"概念：当领出为副牌时，只有与领出牌型相同且数量相同的主牌才视为杀牌
+    const leadSuit = getLeadSuitForCompare(leadCard.cards, currentLevel, trumpSuit);
+
+    const card1QualifiedTrump = isQualifiedTrumpKill(card1, leadCard, currentLevel, trumpSuit);
+    const card2QualifiedTrump = isQualifiedTrumpKill(card2, leadCard, currentLevel, trumpSuit);
+
+    // 合格主杀 优先于任何副牌
+    if (card1QualifiedTrump && !card2QualifiedTrump) return true;
+    if (!card1QualifiedTrump && card2QualifiedTrump) return false;
+
+    // 两者都是合格主杀：按主牌比较规则
+    if (card1QualifiedTrump && card2QualifiedTrump) {
+      return compareTrumpCards(card1, card2, currentLevel, trumpSuit);
+    }
+
+    // 否则，两者都不是合格主杀（包括纯副牌、无效主牌组合、垫牌）按副牌/花色规则比较
+    return compareSuitCards(card1, card2, leadSuit, currentLevel, trumpSuit);
+  };
+
+  // 比较两手牌，返回true如果card1更大（保留旧函数以兼容）
   const compareCards = (card1Array, card2Array, leadSuit, currentLevel, trumpSuit) => {
     // 如果是相同花色或都是主牌，比较大小
     const card1Suit = getLeadSuitForCompare(card1Array, currentLevel, trumpSuit);
@@ -2028,8 +2143,8 @@ const PokerTable = () => {
                 }
                 
                 return (
-                  <div key={index} className={`played-card-group position-${position} ${play.isCurrentWinner ? 'current-winner' : ''}`}>
-                    <div className="cards-group">
+                  <div key={index} className={`played-card-group position-${position}`}>
+                    <div className={`cards-group ${play.isCurrentWinner ? 'current-winner' : ''}`}>
                       {play.cards.map((card, cardIndex) => {
                         const isTrump = isCardTrump(card, gameState?.currentLevel || 2, gameState?.trumpSuit);
                         return (

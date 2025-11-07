@@ -456,13 +456,17 @@ io.on('connection', (socket) => {
     
     const result = room.game.playCardsByIds(playerInfo.player.position, cardIds);
     if (result.success) {
+      // 获取当前轮次中最大的一手牌的索引（用于实时显示黄框）
+      const currentWinnerIndex = room.game.findCurrentWinnerIndex();
+      
       // 通知所有玩家出牌
       io.to(roomId).emit('cardsPlayed', {
         playerName: playerInfo.player.name,
         playerId: playerInfo.player.position,
         cards: result.cards,
         gameState: room.game.getGameState(),
-        message: result.message
+        message: result.message,
+        currentWinnerIndex: currentWinnerIndex // 当前最大一手牌的索引
       });
       
       // 更新玩家手牌

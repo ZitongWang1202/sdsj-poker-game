@@ -2690,25 +2690,38 @@ class ShandongUpgradeGame {
     }
   }
 
+  // 找出当前轮次中最大的一手牌的索引（用于实时显示黄框）
+  findCurrentWinnerIndex() {
+    if (this.roundCards.length === 0) {
+      return -1;
+    }
+    if (this.roundCards.length === 1) {
+      return 0; // 只有一手牌，它就是最大的
+    }
+
+    const leadCard = this.roundCards[0];
+    const leadSuit = this.getLeadSuit(leadCard.cards);
+    let maxIndex = 0;
+
+    // 比较每手牌，找出最大的
+    for (let i = 1; i < this.roundCards.length; i++) {
+      const currentCard = this.roundCards[i];
+      if (this.compareCards(currentCard, this.roundCards[maxIndex], leadSuit)) {
+        maxIndex = i;
+      }
+    }
+
+    return maxIndex;
+  }
+
   // 找出轮次获胜者
   findRoundWinner() {
     if (this.roundCards.length !== 4) {
       return this.roundCards[0].playerId; // 默认第一个玩家
     }
 
-    const leadCard = this.roundCards[0];
-    const leadSuit = this.getLeadSuit(leadCard.cards);
-    let winner = leadCard;
-
-    // 比较每张牌，找出最大的
-    for (let i = 1; i < this.roundCards.length; i++) {
-      const currentCard = this.roundCards[i];
-      if (this.compareCards(currentCard, winner, leadSuit)) {
-        winner = currentCard;
-      }
-    }
-
-    return winner.playerId;
+    const maxIndex = this.findCurrentWinnerIndex();
+    return this.roundCards[maxIndex].playerId;
   }
 
   // 比较两手牌，返回true如果card1更大
@@ -4287,3 +4300,4 @@ class ShandongUpgradeGame {
 ShandongUpgradeGame.CardTypeValidator = CardTypeValidator;
 
 module.exports = ShandongUpgradeGame;
+

@@ -366,21 +366,55 @@
   overflow: visible;
 }
 
-/* 当前最大一手牌的标识 */
-.played-card-group.current-winner .cards-group {
-  animation: winnerGlow 1.5s infinite;
+/* 当前最大一手牌的标识 - 黄框只框在牌的周围 */
+.cards-group.current-winner {
   position: relative;
   z-index: 10;
+}
+
+/* 使用伪元素创建紧贴卡片边缘的黄框 */
+.cards-group.current-winner::before {
+  content: '';
+  position: absolute;
+  /* 
+   * 卡片尺寸说明：
+   * - 宽度：固定 50px（.played-card { width: 50px; }）
+   * - 高度：固定 70px（.played-card { height: 70px; }，比例 1:1.4）
+   * - 不会自适应变化（响应式媒体查询只影响 .hand-card，不影响 .played-card）
+   * 
+   * 黄框水平长度计算：
+   * 1. .cards-group 使用 inline-flex，宽度自动适应内容
+   * 2. 容器宽度 = 卡片数量 × 卡片宽度(50px) + (卡片数量-1) × gap(2px)
+   *    例如：3张牌 = 3 × 50px + 2 × 2px = 154px
+   * 3. 黄框使用 left: 0; right: 0;，所以宽度 = 容器的宽度
+   * 4. 因此黄框水平长度 = 卡片总宽度 + gap总宽度
+   * 
+   * 黄框垂直高度：
+   * 1. 卡片高度固定为 70px
+   * 2. 容器高度应该等于卡片高度（因为 align-items: center 和固定高度）
+   * 3. 由于边框宽度（3px），需要稍微扩展上下，确保边框紧贴卡片边缘
+   */
+  top: -3px; /* 向上扩展3px，补偿边框宽度，紧贴卡片上边缘 */
+  bottom: -3px; /* 向下扩展3px，补偿边框宽度，紧贴卡片下边缘 */
+  left: 0; /* 从容器左边缘开始 */
+  right: 0; /* 到容器右边缘结束，宽度 = 容器宽度 */
+  border: 3px solid rgba(255, 215, 0, 0.8);
+  border-radius: 6px;
+  box-shadow: 0 0 15px rgba(255, 215, 0, 0.8);
+  pointer-events: none;
+  z-index: -1;
+  animation: winnerGlow 1.5s infinite;
+  box-sizing: border-box;
 }
 
 @keyframes winnerGlow {
   0%, 100% {
     box-shadow: 0 0 15px rgba(255, 215, 0, 0.8);
-    border: 3px solid rgba(255, 215, 0, 0.8);
+    border-color: rgba(255, 215, 0, 0.8);
   }
   50% {
     box-shadow: 0 0 25px rgba(255, 215, 0, 1);
-    border: 3px solid rgba(255, 215, 0, 1);
+    border-color: rgba(255, 215, 0, 1);
   }
 }
 
@@ -473,13 +507,14 @@
 }
 
 .cards-group {
-  display: flex;
+  display: inline-flex; /* 改为inline-flex，让容器大小适应内容 */
   gap: 2px;
   align-items: center;
   justify-content: center;
   flex-wrap: nowrap;
   min-width: 0;
   overflow: visible;
+  position: relative;
 }
 
 .played-card {
@@ -487,12 +522,18 @@
   flex-shrink: 0;
   width: 50px;
   min-width: 50px;
+  height: 70px; /* 固定高度：50px * 1.4 = 70px（标准扑克牌比例） */
+  min-height: 70px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .played-card-image {
   width: 100%;
   max-width: 100%;
-  height: auto;
+  height: 100%; /* 固定高度：填满容器70px */
+  object-fit: contain; /* 保持图片比例，适应容器 */
   border-radius: 6px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
   transition: all 0.3s ease;
@@ -571,6 +612,8 @@
   border: 1px solid rgba(255, 215, 0, 0.5);
 }
 
+/* 注释掉：这个定义是为文本卡片设计的，但出牌区域使用的是图片，所以不使用这个定义 */
+/*
 .played-card {
   width: 40px;
   height: 56px;
@@ -586,6 +629,7 @@
   text-align: center;
   line-height: 1.2;
 }
+*/
 
 /* 我的手牌区域 */
 .my-hand-area {
