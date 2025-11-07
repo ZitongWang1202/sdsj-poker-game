@@ -393,12 +393,26 @@ const PokerTable = () => {
           }];
           
           // 使用后端返回的当前最大一手牌索引（复用后端比较逻辑）
-          const currentWinnerIndex = data.currentWinnerIndex !== undefined ? data.currentWinnerIndex : 0;
+          // 如果 currentWinnerIndex 是 -1，说明轮次已结束，保持之前的标记
+          const currentWinnerIndex = data.currentWinnerIndex !== undefined ? data.currentWinnerIndex : -1;
           
-          // 标记最大的一手牌
-          newPlayed.forEach((play, index) => {
-            play.isCurrentWinner = index === currentWinnerIndex;
-          });
+          // 标记最大的一手牌（只有当索引有效时才更新）
+          if (currentWinnerIndex >= 0 && currentWinnerIndex < newPlayed.length) {
+            newPlayed.forEach((play, index) => {
+              play.isCurrentWinner = index === currentWinnerIndex;
+            });
+          } else if (currentWinnerIndex === -1) {
+            // 如果是 -1，保持之前的标记（不更新）
+            // 这样在 roundComplete 事件中，之前的标记会被保留
+            newPlayed.forEach((play, index) => {
+              // 如果之前已经有标记，保持它；否则不标记
+              if (prev[index] && prev[index].isCurrentWinner) {
+                play.isCurrentWinner = true;
+              } else {
+                play.isCurrentWinner = false;
+              }
+            });
+          }
           
           // 如果是轮次结束，显示等待信息
           if (newPlayed.length === 4) {
@@ -423,6 +437,13 @@ const PokerTable = () => {
         } else {
           setGameState(data.gameState);
         }
+        // 确保黄框继续显示：保留 playedCards 中的 isCurrentWinner 标记
+        // 直到 newRoundStarted 事件清空 playedCards
+        // 通过显式调用 setPlayedCards 但保持原有状态，确保 isCurrentWinner 标记被保留
+        setPlayedCards(prev => {
+          // 保持原有 playedCards 不变，只确保 isCurrentWinner 标记被保留
+          return prev;
+        });
       }, 'PokerTable');
 
       socketService.on('newRoundStarted', (data) => {

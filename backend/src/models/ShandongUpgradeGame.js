@@ -1294,6 +1294,8 @@ class ShandongUpgradeGame {
     
     // 如果一轮结束
     if (this.roundCards.length === 4) {
+      // 在 evaluateRound() 之前先获取获胜者索引，因为 evaluateRound() 会清空 roundCards
+      const winnerIndex = this.findCurrentWinnerIndex();
       const finalResult = this.evaluateRound();
       
       // 如果游戏结束，返回最终结果
@@ -1304,9 +1306,20 @@ class ShandongUpgradeGame {
           cardType: validation.cardType,
           nextPlayer: this.currentTurn,
           finalResult: finalResult,
-          message: validation.message
+          message: validation.message,
+          winnerIndex: winnerIndex // 返回获胜者索引
         };
       }
+      
+      // 返回获胜者索引
+      return { 
+        success: true, 
+        cards: playedCards,
+        cardType: validation.cardType,
+        nextPlayer: this.currentTurn,
+        message: validation.message,
+        winnerIndex: winnerIndex // 返回获胜者索引
+      };
     }
     
     return { 

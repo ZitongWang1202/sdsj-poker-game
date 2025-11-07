@@ -457,7 +457,11 @@ io.on('connection', (socket) => {
     const result = room.game.playCardsByIds(playerInfo.player.position, cardIds);
     if (result.success) {
       // 获取当前轮次中最大的一手牌的索引（用于实时显示黄框）
-      const currentWinnerIndex = room.game.findCurrentWinnerIndex();
+      // 如果是第四个玩家出牌，result.winnerIndex 会包含获胜者索引
+      // 否则使用 findCurrentWinnerIndex() 获取
+      const currentWinnerIndex = result.winnerIndex !== undefined 
+        ? result.winnerIndex 
+        : room.game.findCurrentWinnerIndex();
       
       // 通知所有玩家出牌
       io.to(roomId).emit('cardsPlayed', {
