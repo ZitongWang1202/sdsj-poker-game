@@ -405,10 +405,12 @@ const GameLobby = () => {
                 <div key={`player-${index}-${player.name}`} className="player-item">
                   <div className="player-avatar">👤</div>
                   <div className="player-info">
-                    <div className="player-name">{player.name}</div>
-                    <div className="player-badges">
-                      {player.isDealer && <span className="badge dealer-badge">庄家</span>}
-                      {index === 0 && <span className="badge host-badge">房主</span>}
+                    <div className="player-name-row">
+                      <span className="player-name">{player.name}</span>
+                      <div className="player-badges">
+                        {player.isDealer && <span className="badge dealer-badge">庄家</span>}
+                        {index === 0 && <span className="badge host-badge">房主</span>}
+                      </div>
                     </div>
                   </div>
                   <div className="player-position">位置 {index + 1}</div>
@@ -436,7 +438,7 @@ const GameLobby = () => {
           ) : (
             <div className="waiting-status info-message">
               <p>⏳ 等待玩家加入 (还需 {4 - currentRoom.players.length} 名玩家)</p>
-              <p>游戏将在4名玩家加入后自动开始</p>
+              <p>游戏将在 4 名玩家加入后自动开始</p>
             </div>
           )}
         </div>

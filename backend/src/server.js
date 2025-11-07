@@ -855,7 +855,7 @@ io.on('connection', (socket) => {
     
     // 向离开的玩家确认
     socket.emit('leftRoom', {
-      message: '已成功离开房间'
+      message: '🚪 已成功离开房间'
     });
   });
 
