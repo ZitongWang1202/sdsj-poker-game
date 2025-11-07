@@ -95,28 +95,26 @@ class GameManager {
     const p2 = [];
     const p3 = [];
 
-    // 玩家0：一张大王 + ♥7♥7
+    // 玩家0：一张大王 + ♠4♠4（用于叫主）
     p0.push(...take(c => c.suit==='joker' && c.rank==='big', 1));
-    p0.push(...take(c => c.suit==='hearts' && c.rank===7, 2));
+    p0.push(...take(c => c.suit==='spades' && c.rank===4, 2));
 
-    // 玩家1：一对小王 + ♠8♠8
-    p1.push(...take(c => c.suit==='joker' && c.rank==='small', 2));
-    p1.push(...take(c => c.suit==='spades' && c.rank===8, 2));
+    // 玩家1：其他牌（填充用）
+    // 不特别设置，后续会自动填充
 
-    // 玩家2：剩余大王 + ♠J♠J + ♠Q♠Q（用于测试粘主）+ 其他测试牌
-    p2.push(...take(c => c.suit==='joker' && c.rank==='big', 1)); // 剩余的大王
-    p2.push(...take(c => c.suit==='spades' && c.rank==='J', 2));
-    p2.push(...take(c => c.suit==='spades' && c.rank==='Q', 2));
-    // 粘主回馈牌：1张级牌7（非红桃，避免与玩家0冲突）+ 黑桃牌
-    p2.push(...take(c => c.rank === 7 && c.suit !== 'hearts', 1)); // 级牌7（非红桃）
-    p2.push(...take(c => c.suit==='spades' && c.rank !== 'J' && c.rank !== 'Q' && c.rank !== 7 && c.rank !== 8, 4)); // 4张其他黑桃牌
-    // 红桃牌
-    p2.push(...take(c => c.suit==='hearts' && c.rank !== 7, 3)); // 3张红桃牌（非7）
+    // 玩家2：♠6♠7♠8♠9♠10（用于出雨）
+    p2.push(...take(c => c.suit==='spades' && c.rank===6, 1));
+    p2.push(...take(c => c.suit==='spades' && c.rank===7, 1));
+    p2.push(...take(c => c.suit==='spades' && c.rank===8, 1));
+    p2.push(...take(c => c.suit==='spades' && c.rank===9, 1));
+    p2.push(...take(c => c.suit==='spades' && c.rank===10, 1));
 
-    // 玩家3：剩余小王 + ♥9♥9 + ♥10♥10（用于测试粘主）
-    p3.push(...take(c => c.suit==='joker' && c.rank==='small', 1)); // 剩余的小王
-    p3.push(...take(c => c.suit==='hearts' && c.rank===9, 2));
-    p3.push(...take(c => c.suit==='hearts' && c.rank===10, 2));
+    // 玩家3：♠7♠8♠9♠10♠J（用于跟牌雨）
+    p3.push(...take(c => c.suit==='spades' && c.rank===7, 1));
+    p3.push(...take(c => c.suit==='spades' && c.rank===8, 1));
+    p3.push(...take(c => c.suit==='spades' && c.rank===9, 1));
+    p3.push(...take(c => c.suit==='spades' && c.rank===10, 1));
+    p3.push(...take(c => c.suit==='spades' && c.rank==='J', 1));
 
     // 填满各自到26张，带重复检查
     const fillTo = (arr, n) => { 

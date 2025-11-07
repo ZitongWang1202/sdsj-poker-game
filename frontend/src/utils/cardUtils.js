@@ -595,8 +595,8 @@ export const identifyStraight = (cards, currentLevel = 2, trumpSuit = null) => {
   }
 
   // 4) 计算秩序并检查覆盖连续区间，允许重复
-  const order = [2, 3, 4, 5, 6, 7, 8, 9, 10, 'J', 'Q', 'K', 'A'];
-  const toIdx = (r) => order.indexOf(r);
+  const order = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A'];
+  const toIdx = (r) => order.indexOf(String(r));
   const idxs = cards.map(c => toIdx(c.rank)).filter(i => i >= 0);
   if (idxs.length !== cards.length) return { valid: false };
 
