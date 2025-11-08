@@ -4013,8 +4013,9 @@ class ShandongUpgradeGame {
         } else {
           // 不连续，检查当前组是否足够形成雨
           if (currentGroup.length >= 5) {
-            const ranksInGroup = new Set(currentGroup.map(r => r.rank));
-            const cardsInGroup = suitCards.filter(c => ranksInGroup.has(c.rank));
+            // 统一转换为字符串进行比较，避免类型不一致问题
+            const ranksInGroup = new Set(currentGroup.map(r => String(r.rank)));
+            const cardsInGroup = suitCards.filter(c => ranksInGroup.has(String(c.rank)));
             
             // 验证这组牌是否是有效的雨
             const validation = CardTypeValidator.identifyStraight(cardsInGroup, this.currentLevel, this.trumpSuit);
@@ -4032,8 +4033,9 @@ class ShandongUpgradeGame {
       
       // 检查最后一组
       if (currentGroup.length >= 5) {
-        const ranksInGroup = new Set(currentGroup.map(r => r.rank));
-        const cardsInGroup = suitCards.filter(c => ranksInGroup.has(c.rank));
+        // 统一转换为字符串进行比较，避免类型不一致问题
+        const ranksInGroup = new Set(currentGroup.map(r => String(r.rank)));
+        const cardsInGroup = suitCards.filter(c => ranksInGroup.has(String(c.rank)));
         
         const validation = CardTypeValidator.identifyStraight(cardsInGroup, this.currentLevel, this.trumpSuit);
         if (validation.valid) {
