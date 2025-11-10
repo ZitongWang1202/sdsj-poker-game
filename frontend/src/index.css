@@ -21,10 +21,6 @@ body {
   overflow: hidden; /* 防止root出现滚动条 */
 }
 
-/* 为GameLobby页面添加特殊的padding */
-.game-lobby {
-  padding: 20px 0;
-}
 
 /* 通用按钮样式 */
 .btn {
@@ -79,6 +75,8 @@ body {
   padding: 20px;
   box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
   margin-bottom: 20px;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 /* 通用输入框样式 */
