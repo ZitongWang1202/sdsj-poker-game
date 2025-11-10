@@ -379,7 +379,7 @@ const PokerTable = () => {
             displayType = cardType.name;
           } else {
             // 跟牌时，统一显示四类字样：跟牌/垫牌/杀牌/超杀
-            const followType = getFollowType(sortedCards, prev[0], currentLevel, trumpSuit);
+            const followType = getFollowType(sortedCards, prev[0], currentLevel, trumpSuit, prev);
             displayType = followType;
           }
           
@@ -1336,8 +1336,23 @@ const PokerTable = () => {
       // 都是主牌：比较最大的一张
       const maxCard1 = getMaxCard(card1Array, currentLevel, trumpSuit);
       const maxCard2 = getMaxCard(card2Array, currentLevel, trumpSuit);
-      return getCardValueForCompare(maxCard1, currentLevel, trumpSuit) > 
-             getCardValueForCompare(maxCard2, currentLevel, trumpSuit);
+      const value1 = getCardValueForCompare(maxCard1, currentLevel, trumpSuit);
+      const value2 = getCardValueForCompare(maxCard2, currentLevel, trumpSuit);
+      
+      // 调试日志：主牌比较
+      console.log('🔍 主牌比较调试:', {
+        card1: card1Array.map(c => `${c.suit}${c.rank}`),
+        card2: card2Array.map(c => `${c.suit}${c.rank}`),
+        maxCard1: `${maxCard1.suit}${maxCard1.rank}`,
+        maxCard2: `${maxCard2.suit}${maxCard2.rank}`,
+        value1: value1,
+        value2: value2,
+        result: value1 > value2,
+        currentLevel: currentLevel,
+        trumpSuit: trumpSuit
+      });
+      
+      return value1 > value2;
     }
     
     // 都是副牌：比较最大的一张
@@ -1402,14 +1417,22 @@ const PokerTable = () => {
   };
 
   // 判断跟牌类型
-  const getFollowType = (selectedCardObjects, leadCard) => {
+  const getFollowType = (selectedCardObjects, leadCard, currentLevelParam = null, trumpSuitParam = null, playedCardsParam = null) => {
     if (!leadCard || !leadCard.cards || selectedCardObjects.length === 0) {
       return '出牌';
     }
 
     const leadCards = leadCard.cards;
-    const currentLevel = gameState?.currentLevel || 2;
-    const trumpSuit = gameState?.trumpSuit;
+    // 优先使用传入的参数，如果没有则从 gameState 获取
+    const currentLevel = currentLevelParam !== null ? currentLevelParam : (gameState?.currentLevel || 2);
+    const trumpSuit = trumpSuitParam !== null ? trumpSuitParam : gameState?.trumpSuit;
+    // 优先使用传入的 playedCards，如果没有则使用组件级的 playedCards state
+    const playedCardsToUse = playedCardsParam !== null ? playedCardsParam : playedCards;
+    
+    // 调试：检查 trumpSuit
+    if (!trumpSuit) {
+      console.warn('⚠️ getFollowType: trumpSuit 为 undefined/null，currentLevel:', currentLevel, 'gameState:', gameState);
+    }
 
     // 获取领出花色
     const getLeadSuit = (cards) => {
@@ -1459,9 +1482,21 @@ const PokerTable = () => {
     });
 
     // 检查是否全部是主牌
-    const isAllTrump = selectedCardObjects.every(card => 
-      isCardTrump(card, currentLevel, trumpSuit)
-    );
+    const isAllTrump = selectedCardObjects.every(card => {
+      const isTrump = isCardTrump(card, currentLevel, trumpSuit);
+      // 调试日志：检查主牌识别
+      if (!isTrump && trumpSuit) {
+        console.log('🔍 主牌识别调试:', {
+          card: card,
+          cardSuit: card.suit,
+          trumpSuit: trumpSuit,
+          currentLevel: currentLevel,
+          isTrump: isTrump,
+          suitMatch: card.suit === trumpSuit
+        });
+      }
+      return isTrump;
+    });
 
     // 检查当前轮次中是否有人已经杀牌
     const hasKillInRound = playedCards.some(playedCard => {
@@ -1507,16 +1542,53 @@ const PokerTable = () => {
 
     // 领出为副牌时，才可能出现 杀牌/超杀
     if (isLeadNonTrump) {
+      // 调试日志：检查关键条件
+      console.log('🔍 跟牌类型判断调试:', {
+        isLeadNonTrump: isLeadNonTrump,
+        isAllTrump: isAllTrump,
+        structureMatched: structureMatched,
+        selectedCards: selectedCardObjects.map(c => `${c.suit}${c.rank}`),
+        leadCards: leadCards.map(c => `${c.suit}${c.rank}`),
+        currentLevel: currentLevel,
+        trumpSuit: trumpSuit,
+        playedCardsLength: playedCardsToUse.length
+      });
+      
       if (isAllTrump && structureMatched) {
-        // 计算之前是否已有有效的“杀”（结构匹配且全主）并找出其最大的一手
+        // 计算之前是否已有有效的"杀"（结构匹配且全主）并找出其最大的一手
         const leadSuitForCompare = getLeadSuit(leadCards);
         let priorKillMax = null; // { cards }
-        for (let i = 1; i < playedCards.length; i++) {
-          const prev = playedCards[i];
+        
+        // 调试日志：检查 playedCards 内容
+        console.log('🔍 查找之前的杀牌 - playedCards:', playedCardsToUse.map((p, idx) => ({
+          index: idx,
+          playerName: p.playerName,
+          cards: (p.cards || []).map(c => `${c.suit}${c.rank}`),
+          displayType: p.displayType
+        })));
+        
+        for (let i = 1; i < playedCardsToUse.length; i++) {
+          const prev = playedCardsToUse[i];
           const prevCards = prev.cards || [];
-          if (prevCards.length !== leadCards.length) continue;
+          
+          // 调试日志：检查每手牌
+          console.log(`🔍 检查第${i}手牌:`, {
+            cards: prevCards.map(c => `${c.suit}${c.rank}`),
+            length: prevCards.length,
+            leadLength: leadCards.length,
+            lengthMatch: prevCards.length === leadCards.length
+          });
+          
+          if (prevCards.length !== leadCards.length) {
+            console.log(`  ❌ 长度不匹配，跳过`);
+            continue;
+          }
+          
           const prevType = identifyCardType(prevCards, currentLevel, trumpSuit);
           const prevAllTrump = prevCards.every(c => isCardTrump(c, currentLevel, trumpSuit));
+          
+          console.log(`  牌型: ${prevType.type}, 全主: ${prevAllTrump}`);
+          
           const prevStructureMatched = (() => {
             if (leadType.type === 'single') return prevType.type === 'single';
             if (leadType.type === 'pair') return prevType.type === 'pair';
@@ -1528,7 +1600,16 @@ const PokerTable = () => {
             }
             return true;
           })();
-          if (!prevAllTrump || !prevStructureMatched) continue;
+          
+          console.log(`  结构匹配: ${prevStructureMatched}`);
+          
+          if (!prevAllTrump || !prevStructureMatched) {
+            console.log(`  ❌ 不是有效杀牌（全主: ${prevAllTrump}, 结构匹配: ${prevStructureMatched}），跳过`);
+            continue;
+          }
+          
+          console.log(`  ✅ 找到有效杀牌！`);
+          
           if (!priorKillMax) {
             priorKillMax = { cards: prevCards };
           } else {
@@ -1538,11 +1619,28 @@ const PokerTable = () => {
           }
         }
 
+        // 调试日志：检查超杀判断
+        console.log('🔍 超杀判断调试:', {
+          priorKillMax: priorKillMax ? priorKillMax.cards.map(c => `${c.suit}${c.rank}`) : null,
+          selectedCards: selectedCardObjects.map(c => `${c.suit}${c.rank}`),
+          leadSuitForCompare: leadSuitForCompare,
+          currentLevel: currentLevel,
+          trumpSuit: trumpSuit
+        });
+
         if (!priorKillMax) {
           return '杀牌';
         }
-        // 必须严格大于之前的杀，才算“超杀”，否则按“垫牌”
+        // 必须严格大于之前的杀，才算"超杀"，否则按"垫牌"
         const isBiggerThanPriorKill = compareCards(selectedCardObjects, priorKillMax.cards, leadSuitForCompare, currentLevel, trumpSuit);
+        
+        // 调试日志：检查比较结果
+        console.log('🔍 超杀比较结果:', {
+          isBiggerThanPriorKill: isBiggerThanPriorKill,
+          selectedCards: selectedCardObjects.map(c => `${c.suit}${c.rank}`),
+          priorKillCards: priorKillMax.cards.map(c => `${c.suit}${c.rank}`)
+        });
+        
         return isBiggerThanPriorKill ? '超杀' : '垫牌';
       }
     }
@@ -1593,7 +1691,12 @@ const PokerTable = () => {
       }
 
       // 跟牌校验通过：统一用 跟牌/垫牌/杀牌/超杀 四类字样作为按钮括号
-      const followType = getFollowType(selectedCardObjects, playedCards[0], gameState?.currentLevel || 2, gameState?.trumpSuit);
+      // 尝试从多个来源获取 trumpSuit
+      const trumpSuitForFollow = gameState?.trumpSuit || null;
+      if (!trumpSuitForFollow) {
+        console.warn('⚠️ validatePlayCards: trumpSuit 为 undefined，gameState:', gameState);
+      }
+      const followType = getFollowType(selectedCardObjects, playedCards[0], gameState?.currentLevel || 2, trumpSuitForFollow, playedCards);
       const safeType = rawType.type === 'invalid'
         ? { type: 'follow', name: followType, cards: selectedCardObjects, message: followType }
         : { ...rawType, name: followType };
